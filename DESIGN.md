@@ -743,6 +743,22 @@ Where the code differs from the sections above, the code is right:
 - 2026-09-08 — after the real draft: the late `top` drops TE as soon as the
   TE slot is filled and no flex is open (was: only with ≤ 2 bench spots), so
   the last rounds show the remaining RB/WR options instead of six tight ends.
+- 2026-09-08 — injury watching. Sleeper has **no** injuries endpoint
+  (`/v1/players/nfl/injuries`, `/v1/injuries/nfl` and the seasonal variants all
+  404) and no event feed, so "coming off IR" can only be a snapshot diff. The
+  cheap source is an undocumented per-player view,
+  `GET /v1/players/nfl/<player_id>` — about 1 KB, `s-maxage=600`, carrying
+  `injury_status`, `injury_body_part`, `injury_notes`, `injury_start_date`,
+  `practice_participation`, `status` and `depth_chart_order`. `injuries.py`
+  watches my whole roster (IR slot included) plus the best unowned sidelined
+  players (`search_rank <= FREE_AGENT_RANK`), capped at `WATCH_LIMIT`, one call
+  each against the Sleeper budget; it stores `injuries.<league_id>.json` in the
+  cache and classifies each change on a severity scale (clear < questionable <
+  doubtful < sidelined) into activated / upgraded / downgraded / sidelined,
+  plus first practice participation and team changes. A player seen for the
+  first time is never a change, so the first run only writes a baseline.
+  Delivery is a scheduled Claude task rather than a daemon: a standalone
+  process cannot reach Ishan's phone, since the push channel is a Claude tool.
 - 2026-09-06 — ESPN's `kona_player_info` rows carry season projections in
   `stats` (statSourceId 1, scoringPeriodId 0: `appliedTotal`, `appliedAverage`);
   `strip_stats` lifts them to `proj_pts`/`proj_ppg` before discarding the block,

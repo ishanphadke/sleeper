@@ -30,6 +30,7 @@ compute over the result. Errors print `error: ...` on stderr with exit 1.
 | `transactions [--week N] [--type waiver\|free_agent\|trade] [--limit N]` | moves with names, newest first |
 | `players <query> [--pos QB] [--limit N]` / `players --refresh` | dictionary search / re-download |
 | `trending [--kind add\|drop] [--hours N] [--limit N]` | most added/dropped across Sleeper |
+| `injuries [--league ID] [--limit N] [--no-save]` | injury and IR changes since the last check: my roster plus the best unowned sidelined players, one `/v1/players/nfl/<id>` call each; each run saves a snapshot, `--no-save` reports without moving it |
 | `drafts [--season N]` | my drafts with status, format and my slot |
 | `draft status [--draft ID\|URL]` | on the clock, my next pick, clock estimate, last 5 picks (cheap, no dictionary) |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -179,3 +180,11 @@ avoid = ["Christian McCaffrey"]
   `picks_since` or `last_picks`, and carry `keeper: yes` in `draft picks`.
 - `note:` carries anything the command wants you to know (stale dictionary, no
   rankings cache). Pass it on.
+- `injuries` reports one row per change since the previous run, mine first:
+  `activated` (off IR/PUP/Out and playable — the waiver signal), `practice`
+  (first practice participation logged), `upgraded`/`downgraded` (designation
+  eased or worsened without crossing the line), `sidelined` (newly out) and
+  `team`. A player seen for the first time is never a change, so the first run
+  only writes the baseline. Sleeper has no injuries endpoint and no event
+  feed: this is a snapshot diff, and the per-player view is CDN-cached about
+  ten minutes, so checking more often than that adds nothing.
