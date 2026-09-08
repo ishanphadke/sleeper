@@ -14,6 +14,7 @@ from pathlib import Path
 
 from . import api
 from . import draft as D
+from . import injuries as I
 from . import league as L
 from . import players as P
 from . import rankings as R
@@ -712,7 +713,32 @@ def live_outlook(poller: "D.Poller", env: dict, limit: int = 12) -> dict | None:
     return _outlook(env, poller.picks, poller.traded, limit, max(1, nxt - 6), poller.keeper_nos)
 
 
+def injuries(league_id: str | None = None, limit: int = I.WATCH_LIMIT, save: bool = True) -> dict:
+    """Injury and IR changes since the last check: my roster plus the best unowned sidelined players."""
+    lid = _league_id(league_id)
+    note = P.ensure(24 * 7, allow_refresh=False)
+    ctx = _league_ctx(lid)
+    table = P.load()
+    uid = me()["user_id"]
+    mine_id = next((r["roster_id"] for r in ctx["rosters"] if r.get("owner_id") == uid or uid in (r.get("co_owners") or [])), None)
+    pids = I.watchlist(ctx["rosters"], mine_id, table, limit)
+    my_pids = {pid for r in ctx["rosters"] if r.get("roster_id") == mine_id
+               for key in ("players", "reserve", "taxi") for pid in (r.get(key) or [])}
+    before = I.load_snapshot(lid)
+    now, failed = I.poll(pids)
+    changes = I.diff(before, now, table, my_pids)
+    if save:
+        I.save_snapshot(lid, {**before, **now})
+    out = {
+        "league": ctx["league"].get("name", lid),
+        "watching": f"{len(now)} players ({len(my_pids & set(now))} mine)" + (f", {len(failed)} unreadable" if failed else ""),
+        "since": "first run: baseline saved, nothing to compare" if not before else f"{(I.snapshot_age_min(lid) or 0):.0f} min since the last check",
+        "changes": changes or "-",
+    }
+    return _noted(out, note)
+
+
 EXPORTS = [
     whoami, leagues, league, roster, matchups, transactions, players, trending,
-    drafts, draft_status, draft_picks, draft_available, draft_outlook, draft_plan, draft_wait, plan,
+    drafts, draft_status, draft_picks, draft_available, draft_outlook, draft_plan, draft_wait, plan, injuries,
 ]

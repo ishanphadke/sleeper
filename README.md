@@ -74,6 +74,7 @@ Output is an aligned text table. Add `--json` to compute over the result. Errors
 | `transactions [--week N] [--type ...] [--limit N]` | moves with names, newest first |
 | `players <query> [--pos QB] [--limit N]` | search the player dictionary; `--refresh` re-downloads it |
 | `trending [--kind add\|drop] [--hours N]` | most added or dropped across Sleeper |
+| `injuries [--limit N] [--no-save]` | injury and IR changes since the last check: your roster plus the best sidelined players nobody owns |
 | `drafts [--season N]` | your drafts with status, format and slot |
 | `draft status [--draft ID\|URL]` | on the clock, your next pick, clock estimate, last picks |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -144,9 +145,12 @@ Worth recording, because the official docs do not mention any of it:
 - Picks are served through a CDN with a 15 second cache; a cache-busting query parameter
   reaches the origin.
 - There is **no injuries endpoint**. `/v1/players/nfl/injuries`, `/v1/injuries/nfl` and the
-  seasonal variants all return 404. Injury data lives in the player dictionary and in an
-  undocumented per-player view, `GET /v1/players/nfl/<player_id>`, which returns about a
-  kilobyte and is cached ten minutes.
+  seasonal variants all return 404, and there is no event feed either. Injury data lives in
+  the player dictionary and in an undocumented per-player view,
+  `GET /v1/players/nfl/<player_id>`, which returns about a kilobyte, is cached ten minutes,
+  and carries `injury_status`, `injury_body_part`, `injury_notes`, `injury_start_date` and
+  `practice_participation`. `sleeper injuries` polls that view for a watchlist and diffs the
+  result against a stored snapshot, which is the only way to see someone come off IR.
 
 ## Cache and state
 
@@ -160,4 +164,4 @@ state, and any large `raw` bodies. Deleting the directory costs nothing but a re
 uv run pytest
 ```
 
-149 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.
+155 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.
