@@ -1,0 +1,22 @@
+[project]
+name = "sleeper"
+version = "0.1.0"
+description = "Sleeper fantasy football CLI for Claude"
+requires-python = ">=3.11"
+dependencies = ["httpx>=0.27"]
+
+[project.scripts]
+sleeper = "sleeper.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sleeper"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
