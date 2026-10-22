@@ -135,3 +135,30 @@ def test_bad_offense_players_are_never_received_and_sell_requires_sending_one():
     team_of["r6"] = "BAD"                                  # my bench RB plays on one
     sold = _find(me, them, MIRROR, bad_teams=frozenset({"BAD"}), team_of=team_of, sell=True)
     assert sold and all("r6" in t["give"] for t in sold)
+
+
+def test_mutual_requires_both_teams_to_gain_and_fill_a_hole_and_ranks_the_most_even_first():
+    # MIRROR is a true complement: I am RB-deep and WR-thin, they are the reverse.
+    found = _find(_side("me", ME), _side("them", THEM), MIRROR, mutual=True)
+    assert found
+    assert all(t["their_gain"] >= TR.MIN_GAIN and t["their_hole"] is not None for t in found)
+    evens = [min(t["my_gain"], t["their_gain"]) for t in found]
+    assert evens == sorted(evens, reverse=True)
+    # Even swaps (+6 / +6) outrank the lopsided r6-for-w5 (+8 / +4): even is what gets accepted.
+    top = found[0]
+    assert (top["my_gain"], top["their_gain"]) == (6.0, 6.0) and top["their_hole"] == "r5"
+    assert top["their_filled_by"] in top["give"] and POS[top["their_filled_by"]] == "RB"
+
+
+def test_mutual_offers_nothing_when_the_rosters_do_not_complement():
+    # They have no RB hole for my spare backs to fill, so no trade can help both sides.
+    them = ["q2", "r4", "r5", "w3", "w4", "w5", "w6"]
+    avg = {**MIRROR, "r4": 16, "r5": 15}
+    assert _find(_side("me", ME), _side("them", them), avg, mutual=True) == []
+
+
+def test_market_lists_holes_and_spare_depth():
+    rows = TR.market([_side("me", ME), _side("them", THEM)], POS, MIRROR, SLOTS, FILL)
+    me, them = rows
+    assert me["holes"] == ["QB", "WR"] and me["deep"] == {"RB": ["r6"]}   # r3 starts at flex; r6 (5 over waivers) sits
+    assert them["holes"] == ["QB", "RB"] and them["deep"] == {"WR": ["w6"]}

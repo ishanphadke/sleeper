@@ -146,7 +146,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--bad-offense", type=int, default=0, metavar="N", help="never receive a QB/WR/TE from the N worst passing offenses")
     s.add_argument("--sell", action="store_true", help="with --bad-offense: every trade sends away one of my players on those offenses")
     s.add_argument("--offense-games", type=int, default=3, metavar="G", help="rank offenses on each team's last G games (0 = whole season)")
-    s.set_defaults(run=lambda a: tools.trades(a.league, a.partner, a.limit, a.tolerance, a.need, a.hold, a.bad_offense, a.sell, a.offense_games))
+    s.add_argument("--mutual", action="store_true", help="both teams must gain and fill a hole; most even trades first")
+    s.set_defaults(run=lambda a: tools.trades(a.league, a.partner, a.limit, a.tolerance, a.need, a.hold, a.bad_offense, a.sell,
+                                              a.offense_games, a.mutual))
     s = sub.add_parser("drafts", parents=[common]); s.add_argument("--season", type=int)
     s.set_defaults(run=lambda a: tools.drafts(a.season))
 

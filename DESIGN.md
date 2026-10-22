@@ -873,3 +873,14 @@ Where the code differs from the sections above, the code is right:
   and prints the starting QB per week beside the season rank. Recent form
   still drags CHI to 22nd after Williams returned (12th on his game alone):
   the table is there for judgment, not a verdict.
+- 2026-10-22 — `--mutual`. Ishan wants offers that help both teams (RB-deep for
+  WR-deep complements) and maximise acceptance. Mutual mode requires the
+  partner to gain MIN_GAIN and the trade to fill one of their holes, ranks by
+  min(my_gain, their_gain), and prints a market map (holes; bench depth 1.5+
+  ppg over waivers). On his league it returned nothing; a gate count showed
+  ~1,300 trades that help him, 1,244 of which hurt the partner, 33 that also
+  fill a partner hole, none clearing 0.5/0.5. The one real complement
+  (Golden Bowers: RB hole, Godwin on the bench) swaps near-equal players —
+  Love 10.0, their RB2 10.2, Godwin 10.2 — so neither lineup moves. With fair
+  values, lineup points are close to zero-sum; mutual gains need lopsided
+  positional fits, which this league does not have at the moment.

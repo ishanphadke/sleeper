@@ -786,7 +786,7 @@ def strength(league_id: str | None = None) -> dict:
 
 def trades(league_id: str | None = None, partner: str | None = None, limit: int = 10, tolerance: float = 0.0,
            need: str | None = None, hold: str | None = None, bad_offense: int = 0, sell: bool = False,
-           offense_games: int = 3) -> dict:
+           offense_games: int = 3, mutual: bool = False) -> dict:
     """Trades that lift a weak starting slot of mine without costing the partner, ranked by my weighted points per week gained."""
     lid = _league_id(league_id)
     note = P.ensure(24 * 7, allow_refresh=False)
@@ -848,7 +848,7 @@ def trades(league_id: str | None = None, partner: str | None = None, limit: int 
     bad_teams = OF.bad(off, bad_offense) if bad_offense else frozenset()
     team_of = {pid: row.get("team") for pid, row in table.items()}
     found = TR.find(me_side, rivals, weekly, fills, fill, pos_of, slots, playoff, limit, tolerance, need_pos, hold_pos,
-                    bad_teams, team_of, sell)
+                    bad_teams, team_of, sell, mutual)
 
     out = {
         "league": league.get("name", lid),
@@ -856,14 +856,19 @@ def trades(league_id: str | None = None, partner: str | None = None, limit: int 
         **({"rules": " | ".join(x for x in (f"must upgrade {need_pos}" if need_pos else "",
                                              f"hold {', '.join(sorted(hold_pos))} within {TR.HOLD_TOLERANCE} ppg" if hold_pos else "",
                                              f"no QB/WR/TE from the {bad_offense} worst passing offenses" if bad_offense else "",
-                                             "must send one of my players on them" if sell else "") if x)}
-           if need_pos or hold_pos or bad_offense else {}),
+                                             "must send one of my players on them" if sell else "",
+                                             "both teams gain and fill a hole, most even first" if mutual else "") if x)}
+           if need_pos or hold_pos or bad_offense or mutual else {}),
         **({"offense_basis": f"each team's last {offense_games} games played (from weeks {off_weeks[0]}-{off_weeks[-1]}, so byes are skipped)" if off_weeks else "season"}
            if bad_offense else {}),
         **({"bad_offense_table": [{"team": t, "rank": off[t]["rank"], "season_rank": season_off.get(t, {}).get("rank"),
                                    "yd_g": round(off[t]["ypg"]), "td_g": off[t]["tdpg"], "qbs": off[t].get("qbs", "-")}
                                   for t in sorted(off, key=lambda t: -off[t]["rank"]) if t in bad_teams or
                                   (season_off.get(t, {}).get("rank", 0) > len(season_off) - bad_offense)]} if bad_offense else {}),
+        **({"market": [{"team": m["name"][:20], "holes": ", ".join(m["holes"]) or "-",
+                        "deep": "; ".join(f"{pos}: " + ", ".join(table[p]["name"] for p in ps[:2] if p in table)
+                                          for pos, ps in sorted(m["deep"].items())) or "-"}
+                       for m in TR.market(rivals, pos_of, avg, slots, fill)]} if mutual else {}),
         "my_slots": [{"slot": r["slot"], "starter": name(r["pid"]), "ppg": r["ppg"], "best_waiver": r["waiver"], "margin": r["margin"],
                       "hole": "yes" if r["margin"] < TR.HOLE_MARGIN and LU.SLOT_ELIGIBLE[r["slot"]] & TR.TRADE_POSITIONS
                       else ("waivers" if not LU.SLOT_ELIGIBLE[r["slot"]] & TR.TRADE_POSITIONS else "-")} for r in before],
@@ -873,6 +878,8 @@ def trades(league_id: str | None = None, partner: str | None = None, limit: int 
             "get": ", ".join(name(p) for p in t["get"]),
             "my_gain": t["my_gain"], "their_gain": t["their_gain"],
             "fixes": f"{name(t['hole']) if not t['hole'].startswith('FA:') else 'waiver ' + t['hole'][3:]} ({t['hole_margin']:+} over waivers) -> {name(t['filled_by'])}",
+            **({"their_fix": (f"{name(t['their_hole']) if not t['their_hole'].startswith('FA:') else 'waiver ' + t['their_hole'][3:]}"
+                              f" ({t['their_hole_margin']:+}) -> {name(t['their_filled_by'])}") if t["their_hole"] else "-"} if mutual else {}),
             "value": f"{t['value_give']} for {t['value_get']}",
             "cuts": ", ".join(x for x in (f"me: {name(t['i_cut'])}" if t["i_cut"] else "", f"them: {name(t['they_cut'])}" if t["they_cut"] else "") if x) or "-",
         } for t in found] or "-",

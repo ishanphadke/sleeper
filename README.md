@@ -76,7 +76,7 @@ Output is an aligned text table. Add `--json` to compute over the result. Errors
 | `trending [--kind add\|drop] [--hours N]` | most added or dropped across Sleeper |
 | `injuries [--limit N] [--no-save]` | injury and IR changes since the last check: your roster plus the best sidelined players nobody owns |
 | `strength` | every team ranked by rest-of-season best-lineup points per week, playoff weeks weighted, byes filled from waivers |
-| `trades [--partner X] [--need WR] [--hold RB,QB] [--bad-offense N] [--sell] [--tolerance P]` | trades that fix a weak starting slot without costing the partner, ranked by your gain |
+| `trades [--partner X] [--need WR] [--hold RB,QB] [--bad-offense N] [--sell] [--mutual] [--tolerance P]` | trades that fix a weak starting slot without costing the partner, ranked by your gain |
 | `drafts [--season N]` | your drafts with status, format and slot |
 | `draft status [--draft ID\|URL]` | on the clock, your next pick, clock estimate, last picks |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -145,6 +145,11 @@ flex back can be traded for a receiver). `--tolerance` lets the partner lose a l
 offenses, ranked per game over each team's last three games so a quarterback change shows up,
 and `--sell` requires each trade to send away one of yours from those offenses.
 
+`--mutual` looks for offers likely to be accepted: the partner's lineup must improve too, the
+trade must fill one of their holes, and trades are ranked by the smaller of the two gains so
+the most even come first. It also prints a market map of every team's holes and spare bench
+depth, which is where complementary partners show up.
+
 A cheap screen on season averages prunes the search and every survivor is scored week by
 week. Trades that are a kept trade plus throw-ins are dropped.
 
@@ -204,4 +209,4 @@ state, and any large `raw` bodies. Deleting the directory costs nothing but a re
 uv run pytest
 ```
 
-182 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.
+185 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.

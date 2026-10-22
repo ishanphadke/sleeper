@@ -22,6 +22,7 @@ PER_PARTNER = 3
 HOLE_MARGIN = 3.5     # a starter within this many ppg of the best healthy free agent is a hole worth trading for
 FAIR_PCT = 0.15       # I may receive at most 15% more value over waivers than I give...
 FAIR_ABS = 1.0        # ...or 1 ppg more, whichever is larger; beyond that no manager accepts
+DEPTH_MARGIN = 1.5    # a bench player this far over waivers is spare depth another team could start
 HOLD_TOLERANCE = 0.5  # with --hold, points in that position's dedicated slots (not flex) may drop by at most this much
 HOLE_UPGRADE = 1.0    # the newcomer must out-project the starter he replaces by this much: a lateral swap fixes nothing
 
@@ -139,7 +140,8 @@ def _padded(t: dict, kept: list[dict]) -> bool:
 def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fills: dict[int, dict[str, list[float]]],
          fill: dict[str, list[float]], pos_of: dict[str, str], slots: list[str], playoff: list[int], limit: int,
          tolerance: float = 0.0, need: str | None = None, hold: frozenset[str] = frozenset(),
-         bad_teams: frozenset[str] = frozenset(), team_of: dict[str, str] | None = None, sell: bool = False) -> list[dict]:
+         bad_teams: frozenset[str] = frozenset(), team_of: dict[str, str] | None = None, sell: bool = False,
+         mutual: bool = False) -> list[dict]:
     """Trades ranked by my gain in weighted points per week, keeping only those the partner does not lose by more than `tolerance`.
 
     `me` and each rival are {"name", "players", "reserve", "limit"}. `fills` holds each week's best
@@ -147,7 +149,9 @@ def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fill
     `need` (a position) requires the trade to raise my starting points there and fill a hole with a
     player of that position; `hold` (positions) lets the points in their dedicated slots, flex excluded, drop by at most HOLD_TOLERANCE.
     `bad_teams` are poor passing offenses: their QBs, WRs and TEs are never received, and with `sell`
-    every trade must send away at least one of my players on one of them."""
+    every trade must send away at least one of my players on one of them. With `mutual`, the partner
+    must gain at least MIN_GAIN and the trade must fill one of their holes too; the list is ranked by
+    the smaller of the two gains, since the most even trade is the easiest to accept."""
     avg = ros_avg(weekly)
 
     def season(roster):
@@ -161,7 +165,8 @@ def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fill
     base_pos, base_slot = by_position(base_lineup, pos_of), by_slot(base_lineup)
     screened = []
     for rv in rivals:
-        base_rv = season(rv["players"])[0]
+        base_rv, rv_lineup = season(rv["players"])
+        rv_holes = holes(rv_lineup, fill)
         for gs, rs in candidates(me["players"], rv["players"], pos_of, avg):
             if bad_teams and any((team_of or {}).get(p) in bad_teams and pos_of.get(p) in PASSING_POSITIONS for p in rs):
                 continue
@@ -184,25 +189,36 @@ def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fill
             if any(after_slot.get(h, 0.0) < base_slot.get(h, 0.0) - HOLD_TOLERANCE for h in hold):
                 continue
             theirs_after, their_cut = after_trade(rv["players"], rs, gs, rv["limit"], avg, pos_of, slots, fill, rv["reserve"])
-            if season(theirs_after)[0] - base_rv < -tolerance - 1.0:   # the screen is approximate; leave a margin for the full score
+            their_total, their_lineup = season(theirs_after)
+            if their_total - base_rv < -tolerance - 1.0:   # the screen is approximate; leave a margin for the full score
                 continue
-            screened.append((total_after - base_total, rv, gs, rs, mine_after, theirs_after, my_cut, their_cut, fixed, gv, rv_val))
+            their_fix = fixes_hole(rv_lineup, their_lineup, gs, rv_holes)
+            if mutual and their_fix is None:
+                continue
+            screened.append((total_after - base_total, rv, gs, rs, mine_after, theirs_after, my_cut, their_cut, fixed, gv, rv_val,
+                             their_fix, rv_holes))
     screened.sort(key=lambda x: -x[0])
 
     full_me = full(me["players"])
     full_base = {rv["name"]: full(rv["players"]) for rv in rivals}
     out = []
-    for gain, rv, gs, rs, mine_after, theirs_after, my_cut, their_cut, fixed, gv, rv_val in screened:   # every survivor: a global cut hid whole partners
+    for gain, rv, gs, rs, mine_after, theirs_after, my_cut, their_cut, fixed, gv, rv_val, their_fix, rv_holes in screened:   # every survivor: a global cut hid whole partners
         mg = full(mine_after) - full_me
         tg = full(theirs_after) - full_base[rv["name"]]
-        if mg < MIN_GAIN or tg < -tolerance:
+        if mg < MIN_GAIN or tg < (MIN_GAIN if mutual else -tolerance):
             continue
         starts = {pid for _, pid, _ in LU.best_lineup(mine_after, pos_of, avg, slots, fill)[1]}
         out.append({"partner": rv["name"], "give": gs, "get": rs, "my_gain": round(mg, 1), "their_gain": round(tg, 1),
                     "i_cut": my_cut, "they_cut": their_cut, "core": frozenset(p for p in rs if p in starts),
-                    "hole": fixed[0], "hole_margin": my_holes[fixed[0]][1], "filled_by": fixed[1], "value_give": gv, "value_get": rv_val})
+                    "hole": fixed[0], "hole_margin": my_holes[fixed[0]][1], "filled_by": fixed[1], "value_give": gv, "value_get": rv_val,
+                    "their_hole": their_fix[0] if their_fix else None,
+                    "their_hole_margin": rv_holes[their_fix[0]][1] if their_fix else None,
+                    "their_filled_by": their_fix[1] if their_fix else None})
     # Leanest version of each package first, so throw-ins that change nothing collapse into it.
-    out.sort(key=lambda t: (-t["my_gain"], -t["their_gain"], len(t["give"]) + len(t["get"])))
+    if mutual:                                        # the most even trade first: it is the one most likely to be accepted
+        out.sort(key=lambda t: (-min(t["my_gain"], t["their_gain"]), -t["their_gain"], len(t["give"]) + len(t["get"])))
+    else:
+        out.sort(key=lambda t: (-t["my_gain"], -t["their_gain"], len(t["give"]) + len(t["get"])))
     seen, per_partner, best = set(), {}, []
     for t in out:
         key = (t["partner"], t["core"])                # the players who would start for me; bench fillers do not make a new trade
@@ -212,3 +228,23 @@ def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fill
         per_partner[t["partner"]] = per_partner.get(t["partner"], 0) + 1
         best.append(t)
     return best[:limit]
+
+
+def market(rosters: list[dict], pos_of: dict[str, str], avg: dict[str, float], slots: list[str],
+           fill: dict[str, list[float]]) -> list[dict]:
+    """Each team's holes and depth: a hole is a starter within HOLE_MARGIN of waivers; depth is a bench
+    player at least DEPTH_MARGIN over waivers, someone another team could start."""
+    out = []
+    for r in rosters:
+        _, lineup = LU.best_lineup(r["players"], pos_of, avg, slots, fill)
+        starters = {pid for _, pid, _ in lineup}
+        weak = sorted({slot if slot not in ("FLEX", "SUPER_FLEX", "WRRB_FLEX", "REC_FLEX") else "FLEX"
+                       for slot, pid, pts in lineup if LU.SLOT_ELIGIBLE[slot] & TRADE_POSITIONS
+                       and (pid == "FA" or pts - slot_repl(slot, fill) < HOLE_MARGIN)})
+        deep: dict[str, list[str]] = {}
+        for p in r["players"]:
+            pos = pos_of.get(p)
+            if p not in starters and pos in TRADE_POSITIONS and value(p, avg, pos_of, fill) >= DEPTH_MARGIN:
+                deep.setdefault(pos, []).append(p)
+        out.append({"name": r["name"], "holes": weak, "deep": {pos: sorted(ps, key=lambda p: -avg.get(p, 0)) for pos, ps in deep.items()}})
+    return out

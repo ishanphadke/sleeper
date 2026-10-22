@@ -32,7 +32,7 @@ compute over the result. Errors print `error: ...` on stderr with exit 1.
 | `trending [--kind add\|drop] [--hours N] [--limit N]` | most added/dropped across Sleeper |
 | `injuries [--league ID] [--limit N] [--no-save]` | injury and IR changes since the last check: my roster plus the best unowned sidelined players, one `/v1/players/nfl/<id>` call each; each run saves a snapshot, `--no-save` reports without moving it |
 | `strength [--league ID]` | every team ranked by rest-of-season best-lineup points per week, from Sleeper's weekly projections, playoff weeks weighted; `low_week` is each team's weakest remaining week (byes, injuries) |
-| `trades [--partner X] [--need WR] [--hold RB,QB] [--bad-offense N [--sell] [--offense-games G]] [--limit N] [--tolerance P]` | trades that lift a weak starting slot of mine without costing the partner (or costing at most P points per week), ranked by my gain; `my_slots` shows each starter against the best healthy free agent |
+| `trades [--partner X] [--need WR] [--hold RB,QB] [--bad-offense N [--sell] [--offense-games G]] [--mutual] [--limit N] [--tolerance P]` | trades that lift a weak starting slot of mine without costing the partner (or costing at most P points per week), ranked by my gain; `my_slots` shows each starter against the best healthy free agent |
 | `drafts [--season N]` | my drafts with status, format and my slot |
 | `draft status [--draft ID\|URL]` | on the clock, my next pick, clock estimate, last 5 picks (cheap, no dictionary) |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -225,7 +225,15 @@ avoid = ["Christian McCaffrey"]
   `[IND 25th pass]`. `bad_offense_table` lists them with the season rank and
   the starting QB each week — read it, because a backup stretch (Bears weeks
   4-5) drags a recent rank down even after the starter returns. Ishan wants
-  players on bad offenses moved out (Oct 2026). `?` after a name means Sleeper and ESPN disagree by
+  players on bad offenses moved out (Oct 2026). `--mutual` is for offers with
+  the best chance of acceptance: the partner must gain 0.5+ ppw and the trade
+  must fill one of *their* holes (`their_fix`); rows rank by the smaller of
+  the two gains, most even first. It adds `market`: every team's holes and
+  spare depth (a bench player 1.5+ ppg over waivers) — read it for
+  complements, e.g. a team with an RB hole and a spare WR. An empty mutual
+  list is a real answer, not a bug: in Oct 2026 every candidate complement in
+  his league swapped near-equal players (Love 10.0 for Godwin 10.2) and moved
+  neither lineup. `?` after a name means Sleeper and ESPN disagree by
   5+ ppg on him: check news before proposing. Wide receiver projections were
   the least reliable in the 2025 check, so a WR-for-RB trade deserves a second
   look. Advise from the top rows in two or three lines; the tool cannot
