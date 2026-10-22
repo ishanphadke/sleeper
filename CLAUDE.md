@@ -32,7 +32,7 @@ compute over the result. Errors print `error: ...` on stderr with exit 1.
 | `trending [--kind add\|drop] [--hours N] [--limit N]` | most added/dropped across Sleeper |
 | `injuries [--league ID] [--limit N] [--no-save]` | injury and IR changes since the last check: my roster plus the best unowned sidelined players, one `/v1/players/nfl/<id>` call each; each run saves a snapshot, `--no-save` reports without moving it |
 | `strength [--league ID]` | every team ranked by rest-of-season best-lineup points per week, from Sleeper's weekly projections, playoff weeks weighted; `low_week` is each team's weakest remaining week (byes, injuries) |
-| `trades [--partner X] [--limit N] [--tolerance P]` | trades that lift a weak starting slot of mine without costing the partner (or costing at most P points per week), ranked by my gain; `my_slots` shows each starter against the best healthy free agent |
+| `trades [--partner X] [--need WR] [--hold RB,QB] [--limit N] [--tolerance P]` | trades that lift a weak starting slot of mine without costing the partner (or costing at most P points per week), ranked by my gain; `my_slots` shows each starter against the best healthy free agent |
 | `drafts [--season N]` | my drafts with status, format and my slot |
 | `draft status [--draft ID\|URL]` | on the clock, my next pick, clock estimate, last 5 picks (cheap, no dictionary) |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -211,7 +211,14 @@ avoid = ["Christian McCaffrey"]
   than I send. Each row shows `my_gain` and `their_gain` in playoff-weighted
   points per week, `fixes` (the hole and who fills it) and `cuts` (who each
   side drops to stay at the roster limit). The partner never loses unless
-  `--tolerance` allows it. `?` after a name means Sleeper and ESPN disagree by
+  `--tolerance` allows it. `--need WR` keeps only trades that raise my
+  starting WR points and fill the hole with a WR; `--hold RB,QB` lets the
+  points in those positions' dedicated slots (flex excluded, so trading a
+  flex RB is allowed) drop by at most 0.5 ppg. Ishan's standing ask (Oct
+  2026): better at WR, same at RB, happy with Goff — run
+  `trades --need WR --hold RB,QB`, and add `--tolerance 1` when the strict
+  search is empty (a partner losing under a point a week is projection noise
+  a human will not see). `?` after a name means Sleeper and ESPN disagree by
   5+ ppg on him: check news before proposing. Wide receiver projections were
   the least reliable in the 2025 check, so a WR-for-RB trade deserves a second
   look. Advise from the top rows in two or three lines; the tool cannot

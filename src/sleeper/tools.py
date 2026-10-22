@@ -783,7 +783,8 @@ def strength(league_id: str | None = None) -> dict:
     return _noted(out, note)
 
 
-def trades(league_id: str | None = None, partner: str | None = None, limit: int = 10, tolerance: float = 0.0) -> dict:
+def trades(league_id: str | None = None, partner: str | None = None, limit: int = 10, tolerance: float = 0.0,
+           need: str | None = None, hold: str | None = None) -> dict:
     """Trades that lift a weak starting slot of mine without costing the partner, ranked by my weighted points per week gained."""
     lid = _league_id(league_id)
     note = P.ensure(24 * 7, allow_refresh=False)
@@ -823,11 +824,19 @@ def trades(league_id: str | None = None, partner: str | None = None, limit: int 
                and abs(k["sl_ppg"] - k["espn_ppg"]) >= STALE_DIVERGENCE}
     name = lambda pid: (table[pid]["name"] + (" ?" if pid in suspect else "")) if pid in table else ("waiver" if pid == "FA" else f"#{pid}")
     before = TR.my_slots(me_side["players"], pos_of, avg, slots, fill)
-    found = TR.find(me_side, rivals, weekly, fills, fill, pos_of, slots, playoff, limit, tolerance)
+    need_pos = need.upper() if need else None
+    hold_pos = frozenset(x.strip().upper() for x in (hold or "").split(",") if x.strip())
+    for pos in ({need_pos} if need_pos else set()) | hold_pos:
+        if pos not in TR.TRADE_POSITIONS:
+            raise SleeperError(f"--need/--hold take QB, RB, WR or TE, not {pos!r}")
+    found = TR.find(me_side, rivals, weekly, fills, fill, pos_of, slots, playoff, limit, tolerance, need_pos, hold_pos)
 
     out = {
         "league": league.get("name", lid),
         "weeks": f"{weeks[0]}-{weeks[-1]}" + (f", playoffs {playoff[0]}-{playoff[-1]} x{LU.PLAYOFF_WEIGHT}" if playoff else ""),
+        **({"rules": " | ".join(x for x in (f"must upgrade {need_pos}" if need_pos else "",
+                                             f"hold {', '.join(sorted(hold_pos))} within {TR.HOLD_TOLERANCE} ppg" if hold_pos else "") if x)}
+           if need_pos or hold_pos else {}),
         "my_slots": [{"slot": r["slot"], "starter": name(r["pid"]), "ppg": r["ppg"], "best_waiver": r["waiver"], "margin": r["margin"],
                       "hole": "yes" if r["margin"] < TR.HOLE_MARGIN and LU.SLOT_ELIGIBLE[r["slot"]] & TR.TRADE_POSITIONS
                       else ("waivers" if not LU.SLOT_ELIGIBLE[r["slot"]] & TR.TRADE_POSITIONS else "-")} for r in before],

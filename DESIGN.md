@@ -854,3 +854,10 @@ Where the code differs from the sections above, the code is right:
   and the newcomer in that slot must out-project him by 1+ ppg — writing the
   tests showed an equal-QB swap riding on a WR deal would otherwise count as
   "fixing" the QB hole.
+- 2026-10-22 — `--need` / `--hold`. Ishan: weak at WR, keep RB the same, happy
+  with Goff. A first `hold` summed every starting RB including the flex, which
+  forbade the obvious move (flex RB out, WR in) and returned nothing; hold now
+  means the dedicated slots only. A gate-by-gate count showed 53 receiver
+  trades pass the screen but none survives a strict partner-gain >= 0 in the
+  full weekly score: in this league a WR upgrade that holds RB costs the
+  partner 0.3-1.0 ppw, so `--tolerance 1` is the practical setting.

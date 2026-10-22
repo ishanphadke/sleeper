@@ -107,3 +107,20 @@ def test_my_slots_measure_each_starter_against_the_best_free_agent():
 def test_ros_avg_ignores_byes_and_players_missing_most_weeks():
     weekly = {10: {"a": 10, "b": 4}, 11: {"a": 14}, 12: {"a": 12}, 13: {"a": 12}}
     assert TR.ros_avg(weekly) == {"a": 12.0}
+
+
+def test_need_and_hold_steer_the_search():
+    # In MIRROR my hole is WR. The best fair fix is a bench RB for a WR (r6 for w5).
+    me, them = _side("me", ME), _side("them", THEM)
+    found = _find(me, them, MIRROR, need="WR")
+    assert found and all(POS[t["filled_by"]] == "WR" for t in found)
+    assert _find(me, them, MIRROR, need="QB") == []                       # nothing upgrades my QB
+    # Trading a starting RB (r1 or r2) out of the RB slots breaks --hold RB; bench r6 and flex r3 do not.
+    held = _find(me, them, MIRROR, hold=frozenset({"RB"}))
+    assert held and not any({"r1", "r2"} & set(t["give"]) for t in held)
+
+
+def test_by_slot_keeps_flex_separate_from_the_position():
+    lineup = [("RB", "r1", 16.0), ("RB", "r2", 15.0), ("FLEX", "r3", 14.0), ("WR", "w1", 17.0)]
+    assert TR.by_slot(lineup) == {"RB": 31.0, "FLEX": 14.0, "WR": 17.0}
+    assert TR.by_position(lineup, POS) == {"RB": 45.0, "WR": 17.0}

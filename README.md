@@ -76,7 +76,7 @@ Output is an aligned text table. Add `--json` to compute over the result. Errors
 | `trending [--kind add\|drop] [--hours N]` | most added or dropped across Sleeper |
 | `injuries [--limit N] [--no-save]` | injury and IR changes since the last check: your roster plus the best sidelined players nobody owns |
 | `strength` | every team ranked by rest-of-season best-lineup points per week, playoff weeks weighted, byes filled from waivers |
-| `trades [--partner X] [--tolerance P]` | trades that fix a weak starting slot without costing the partner, ranked by your gain |
+| `trades [--partner X] [--need WR] [--hold RB,QB] [--tolerance P]` | trades that fix a weak starting slot without costing the partner, ranked by your gain |
 | `drafts [--season N]` | your drafts with status, format and slot |
 | `draft status [--draft ID\|URL]` | on the clock, your next pick, clock estimate, last picks |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -138,6 +138,10 @@ only if all of these hold:
   (or one point) more than you send, since no manager accepts more;
 - your lineup improves and the partner's does not get worse.
 
+`--need WR` keeps only trades that upgrade your receivers, and `--hold RB,QB` keeps your
+running back and quarterback slots within half a point a game (the flex is not held, so a
+flex back can be traded for a receiver). `--tolerance` lets the partner lose a little.
+
 A cheap screen on season averages prunes the search and every survivor is scored week by
 week. Trades that are a kept trade plus throw-ins are dropped.
 
@@ -194,4 +198,4 @@ state, and any large `raw` bodies. Deleting the directory costs nothing but a re
 uv run pytest
 ```
 
-174 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.
+176 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.

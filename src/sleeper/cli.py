@@ -141,7 +141,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("trades", parents=[common, lg], help="trades that fix a weak starting slot without costing the partner")
     s.add_argument("--partner", help="team name or owner substring"); s.add_argument("--limit", type=int, default=10)
     s.add_argument("--tolerance", type=float, default=0.0, help="how many points per week the partner may lose")
-    s.set_defaults(run=lambda a: tools.trades(a.league, a.partner, a.limit, a.tolerance))
+    s.add_argument("--need", help="position the trade must upgrade, e.g. WR")
+    s.add_argument("--hold", help="positions whose starting points must not drop, e.g. RB,QB")
+    s.set_defaults(run=lambda a: tools.trades(a.league, a.partner, a.limit, a.tolerance, a.need, a.hold))
     s = sub.add_parser("drafts", parents=[common]); s.add_argument("--season", type=int)
     s.set_defaults(run=lambda a: tools.drafts(a.season))
 

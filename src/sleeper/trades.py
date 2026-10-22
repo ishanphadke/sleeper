@@ -21,6 +21,7 @@ PER_PARTNER = 3
 HOLE_MARGIN = 3.5     # a starter within this many ppg of the best healthy free agent is a hole worth trading for
 FAIR_PCT = 0.15       # I may receive at most 15% more value over waivers than I give...
 FAIR_ABS = 1.0        # ...or 1 ppg more, whichever is larger; beyond that no manager accepts
+HOLD_TOLERANCE = 0.5  # with --hold, points in that position's dedicated slots (not flex) may drop by at most this much
 HOLE_UPGRADE = 1.0    # the newcomer must out-project the starter he replaces by this much: a lateral swap fixes nothing
 
 
@@ -98,6 +99,23 @@ def fair(give: tuple[str, ...], get: tuple[str, ...], avg, pos_of, fill) -> tupl
     return r <= g + max(FAIR_ABS, FAIR_PCT * g), round(g, 1), round(r, 1)
 
 
+def by_slot(lineup: list[tuple[str, str, float]]) -> dict[str, float]:
+    """Points in each dedicated slot type (RB, WR, ...); flex slots are their own types and do not count toward a position."""
+    out: dict[str, float] = {}
+    for slot, _, pts in lineup:
+        out[slot] = out.get(slot, 0.0) + pts
+    return out
+
+
+def by_position(lineup: list[tuple[str, str, float]], pos_of: dict[str, str]) -> dict[str, float]:
+    """Starting points per position, counting flex starters at their own position; waiver fill-ins are left out."""
+    out: dict[str, float] = {}
+    for _, pid, pts in lineup:
+        if pid != "FA":
+            out[pos_of.get(pid, "?")] = out.get(pos_of.get(pid, "?"), 0.0) + pts
+    return out
+
+
 def candidates(mine: list[str], theirs: list[str], pos_of: dict[str, str], avg: dict[str, float]) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
     """1-for-1, 2-for-1, 1-for-2 and 2-for-2 swaps of QB/RB/WR/TE with a projection."""
     give = [p for p in mine if pos_of.get(p) in TRADE_POSITIONS and avg.get(p, 0) > 0]
@@ -119,11 +137,13 @@ def _padded(t: dict, kept: list[dict]) -> bool:
 
 def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fills: dict[int, dict[str, list[float]]],
          fill: dict[str, list[float]], pos_of: dict[str, str], slots: list[str], playoff: list[int], limit: int,
-         tolerance: float = 0.0) -> list[dict]:
+         tolerance: float = 0.0, need: str | None = None, hold: frozenset[str] = frozenset()) -> list[dict]:
     """Trades ranked by my gain in weighted points per week, keeping only those the partner does not lose by more than `tolerance`.
 
     `me` and each rival are {"name", "players", "reserve", "limit"}. `fills` holds each week's best
-    healthy free agents (a bye is streamed); `fill` the best healthy free agents by season average."""
+    healthy free agents (a bye is streamed); `fill` the best healthy free agents by season average.
+    `need` (a position) requires the trade to raise my starting points there and fill a hole with a
+    player of that position; `hold` (positions) lets the points in their dedicated slots, flex excluded, drop by at most HOLD_TOLERANCE."""
     avg = ros_avg(weekly)
 
     def season(roster):
@@ -134,6 +154,7 @@ def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fill
 
     base_total, base_lineup = season(me["players"])
     my_holes = holes(base_lineup, fill)
+    base_pos, base_slot = by_position(base_lineup, pos_of), by_slot(base_lineup)
     screened = []
     for rv in rivals:
         base_rv = season(rv["players"])[0]
@@ -147,6 +168,12 @@ def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fill
                 continue
             fixed = fixes_hole(base_lineup, lineup_after, rs, my_holes)
             if fixed is None:
+                continue
+            after_pos = by_position(lineup_after, pos_of)
+            if need and (pos_of.get(fixed[1]) != need or after_pos.get(need, 0.0) <= base_pos.get(need, 0.0)):
+                continue
+            after_slot = by_slot(lineup_after)          # hold means the dedicated slots; the flex is fair game
+            if any(after_slot.get(h, 0.0) < base_slot.get(h, 0.0) - HOLD_TOLERANCE for h in hold):
                 continue
             theirs_after, their_cut = after_trade(rv["players"], rs, gs, rv["limit"], avg, pos_of, slots, fill, rv["reserve"])
             if season(theirs_after)[0] - base_rv < -tolerance - 1.0:   # the screen is approximate; leave a margin for the full score
