@@ -32,6 +32,7 @@ compute over the result. Errors print `error: ...` on stderr with exit 1.
 | `trending [--kind add\|drop] [--hours N] [--limit N]` | most added/dropped across Sleeper |
 | `injuries [--league ID] [--limit N] [--no-save]` | injury and IR changes since the last check: my roster plus the best unowned sidelined players, one `/v1/players/nfl/<id>` call each; each run saves a snapshot, `--no-save` reports without moving it |
 | `strength [--league ID]` | every team ranked by rest-of-season best-lineup points per week, from Sleeper's weekly projections, playoff weeks weighted; `low_week` is each team's weakest remaining week (byes, injuries) |
+| `trades [--partner X] [--limit N] [--tolerance P]` | trades that lift a weak starting slot of mine without costing the partner (or costing at most P points per week), ranked by my gain; `my_slots` shows each starter against the best healthy free agent |
 | `drafts [--season N]` | my drafts with status, format and my slot |
 | `draft status [--draft ID\|URL]` | on the clock, my next pick, clock estimate, last 5 picks (cheap, no dictionary) |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -190,9 +191,22 @@ avoid = ["Christian McCaffrey"]
   feed: this is a snapshot diff, and the per-player view is CDN-cached about
   ten minutes, so checking more often than that adds nothing.
 - `strength` scores each roster by its best legal lineup in every remaining week
-  through the fantasy final, using Sleeper's weekly projections (byes and IR
-  weeks score zero), then averages with playoff weeks weighted 1.5×. `score`
+  through the fantasy final, using Sleeper's weekly projections , then averages with playoff weeks weighted 1.5×. An empty slot (bye, injury)
+  takes the best healthy free agent at that position that week, so a bye costs
+  only the gap to waivers. `score`
   is that weighted average and decides the rank; `regular` and `playoffs`
   split it. It sees only projections: an IR stash projects zero until Sleeper
   projects his return, so `no_proj` counts rostered players with no
   projection in any remaining week.
+- `trades` follows Ishan's rule: **byes are never a reason to trade** (waivers
+  cover them); a trade must fix a starting slot that is weak across the
+  season. `my_slots` is that diagnosis: `margin` is the starter's projected
+  ppg minus the best healthy free agent's at the slot, so a small or negative
+  margin is a hole. Each trade row shows `my_gain` and `their_gain` in
+  playoff-weighted points per week, `fixes` (the starting slot it upgrades)
+  and `cuts` (who each side must drop to stay at the roster limit). The
+  partner never loses unless `--tolerance` allows it. `?` after a name means
+  Sleeper and ESPN disagree by 5+ ppg on him: check news before proposing.
+  Wide receiver projections were the least reliable in the 2025 check, so a
+  WR-for-RB trade deserves a second look. Advise from the top rows in two or
+  three lines; the tool cannot propose a trade, Ishan does that in the app.

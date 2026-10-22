@@ -16,6 +16,7 @@ from . import api
 from . import draft as D
 from . import injuries as I
 from . import lineup as LU
+from . import trades as TR
 from . import league as L
 from . import players as P
 from . import rankings as R
@@ -739,8 +740,13 @@ def injuries(league_id: str | None = None, limit: int = I.WATCH_LIMIT, save: boo
     return _noted(out, note)
 
 
+def _hurt(table: dict[str, dict]) -> set[str]:
+    """Players who cannot be picked up to start this week: sidelined or doubtful."""
+    return {pid for pid, p in table.items() if I.is_sidelined(p) or p.get("injury_status") == "Doubtful"}
+
+
 def strength(league_id: str | None = None) -> dict:
-    """Every team's rest-of-season best-lineup points per week from Sleeper's weekly projections, playoff weeks weighted."""
+    """Every team's rest-of-season best-lineup points per week, empty slots filled from waivers, playoff weeks weighted."""
     lid = _league_id(league_id)
     note = P.ensure(24 * 7, allow_refresh=False)
     ctx = _league_ctx(lid)
@@ -750,17 +756,18 @@ def strength(league_id: str | None = None) -> dict:
         return _noted({"league": league.get("name", lid), "weeks": "-", "teams": "season over"}, note)
     weekly = LU.load_weeks(league.get("season") or state()["season"], weeks, R.scoring_for(league))
     pos_of = {pid: row["position"] for pid, row in table.items()}
+    taken = {pid for r in ctx["rosters"] for pid in (r.get("players") or [])} | _hurt(table)
+    fills = {w: LU.replacement(pts, taken, pos_of) for w, pts in weekly.items()}
     uid = me()["user_id"]
     rows = []
     for r in ctx["rosters"]:
         pids = list(dict.fromkeys(pid for key in ("players", "reserve") for pid in (r.get(key) or [])))  # players already lists the IR slot
-        st = LU.strength(pids, pos_of, weekly, league.get("roster_positions") or [], playoff)
+        st = LU.strength(pids, pos_of, weekly, league.get("roster_positions") or [], playoff, fills)
         unprojected = [table[pid]["name"] for pid in pids if pid in table and not any(pid in w for w in weekly.values())]
         team = ctx["teams"][r["roster_id"]]
         rows.append({
             "team": team["team_name"][:22], "mine": r.get("owner_id") == uid, "record": team["record"],
-            "score": st["score"], "ros_ppg": st["ros_ppg"], "regular": st["regular_ppg"], "playoffs": st["playoff_ppg"],
-            "low_week": f"wk {st['low_week']}: {st['low_pts']}" if st["low_week"] else "-",
+            "score": round(st["score"], 1), "ros_ppg": st["ros_ppg"], "regular": st["regular_ppg"], "playoffs": st["playoff_ppg"],
             "no_proj": len(unprojected),
         })
     rows.sort(key=lambda x: -x["score"])
@@ -774,7 +781,72 @@ def strength(league_id: str | None = None) -> dict:
     return _noted(out, note)
 
 
+def trades(league_id: str | None = None, partner: str | None = None, limit: int = 10, tolerance: float = 0.0) -> dict:
+    """Trades that lift a weak starting slot of mine without costing the partner, ranked by my weighted points per week gained."""
+    lid = _league_id(league_id)
+    note = P.ensure(24 * 7, allow_refresh=False)
+    ctx = _league_ctx(lid)
+    league, table = ctx["league"], P.load()
+    weeks, playoff = LU.season_weeks(league, int(state().get("week") or 1))
+    if not weeks:
+        return _noted({"league": league.get("name", lid), "trades": "season over"}, note)
+    weekly = LU.load_weeks(league.get("season") or state()["season"], weeks, R.scoring_for(league))
+    pos_of = {pid: row["position"] for pid, row in table.items()}
+    slots = league.get("roster_positions") or []
+    rostered_all = {pid for r in ctx["rosters"] for pid in (r.get("players") or [])}
+    taken = rostered_all | _hurt(table)
+    fills = {w: LU.replacement(pts, taken, pos_of) for w, pts in weekly.items()}
+    limit_n = len(slots)
+    uid = me()["user_id"]
+
+    def side(r):
+        return {"name": ctx["teams"][r["roster_id"]]["team_name"], "players": list(dict.fromkeys(r.get("players") or [])),
+                "reserve": set(r.get("reserve") or []), "limit": limit_n}
+
+    mine = next((r for r in ctx["rosters"] if r.get("owner_id") == uid or uid in (r.get("co_owners") or [])), None)
+    if mine is None:
+        raise SleeperError("no roster of mine in this league")
+    rivals = [side(r) for r in ctx["rosters"] if r is not mine]
+    if partner:
+        q = partner.lower()
+        rivals = [rv for rv in rivals if q in rv["name"].lower()
+                  or q in (ctx["teams"][next(r["roster_id"] for r in ctx["rosters"] if ctx["teams"][r["roster_id"]]["team_name"] == rv["name"])]["owner"] or "").lower()]
+        if not rivals:
+            raise SleeperError(f"no team matches {partner!r}")
+    me_side = side(mine)
+    avg = TR.ros_avg(weekly)
+    fill = LU.replacement(avg, taken, pos_of)
+    rank = R.rank_of(R.load(league.get("season") or state()["season"], R.scoring_for(league)), table)
+    suspect = {pid for pid in rostered_all if (k := rank(pid)).get("sl_ppg") is not None and k.get("espn_ppg") is not None
+               and abs(k["sl_ppg"] - k["espn_ppg"]) >= STALE_DIVERGENCE}
+    name = lambda pid: (table[pid]["name"] + (" ?" if pid in suspect else "")) if pid in table else ("waiver" if pid == "FA" else f"#{pid}")
+    before = TR.my_slots(me_side["players"], pos_of, avg, slots, fill)
+    found = TR.find(me_side, rivals, weekly, fills, fill, pos_of, slots, playoff, limit, tolerance)
+
+    def fixes(t):
+        new = [p for p in me_side["players"] if p not in t["give"] and p != t["i_cut"]] + list(t["get"])
+        after = TR.my_slots(new, pos_of, avg, slots, fill)
+        diffs = sorted(((a["ppg"] - b["ppg"], b, a) for b, a in zip(before, after) if a["slot"] == b["slot"]), key=lambda x: -x[0])
+        d, b, a = diffs[0]
+        return f"{b['slot']} {name(b['pid'])} {b['ppg']} -> {name(a['pid'])} {a['ppg']}"
+
+    out = {
+        "league": league.get("name", lid),
+        "weeks": f"{weeks[0]}-{weeks[-1]}" + (f", playoffs {playoff[0]}-{playoff[-1]} x{LU.PLAYOFF_WEIGHT}" if playoff else ""),
+        "my_slots": [{"slot": r["slot"], "starter": name(r["pid"]), "ppg": r["ppg"], "best_waiver": r["waiver"], "margin": r["margin"]} for r in before],
+        "trades": [{
+            "partner": t["partner"][:20],
+            "give": ", ".join(name(p) for p in t["give"]),
+            "get": ", ".join(name(p) for p in t["get"]),
+            "my_gain": t["my_gain"], "their_gain": t["their_gain"],
+            "fixes": fixes(t),
+            "cuts": ", ".join(x for x in (f"me: {name(t['i_cut'])}" if t["i_cut"] else "", f"them: {name(t['they_cut'])}" if t["they_cut"] else "") if x) or "-",
+        } for t in found] or "-",
+    }
+    return _noted(out, note)
+
+
 EXPORTS = [
     whoami, leagues, league, roster, matchups, transactions, players, trending,
-    drafts, draft_status, draft_picks, draft_available, draft_outlook, draft_plan, draft_wait, plan, injuries, strength,
+    drafts, draft_status, draft_picks, draft_available, draft_outlook, draft_plan, draft_wait, plan, injuries, strength, trades,
 ]

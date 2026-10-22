@@ -827,3 +827,17 @@ Where the code differs from the sections above, the code is right:
   last playoff round (`playoff_week_start` + log2(teams) − 1), playoffs 1.5×.
   Sleeper's `players` list already includes the IR slot; adding `reserve`
   double-counts.
+- 2026-10-22 — trade finder (`trades.py`, `sleeper trades`). Ishan's rule: byes
+  are not a reason to trade, waivers cover them; trades only fix season-long
+  holes. So an empty lineup slot now takes the best *healthy* free agent at
+  that position (weekly for the week-by-week score, the best FA's own
+  rest-of-season average for the screen and `my_slots`). Two traps found while
+  building it: (1) injured free agents (DJ Moore, McLaurin, both Out) still
+  carry return-week projections and inflated the WR baseline to 13.5 ppg, so
+  sidelined and doubtful players are excluded from the fill; (2) a global
+  top-300 cut after the screen silently hid three of four partners with valid
+  trades once the partner tolerance loosened, so every screen survivor is
+  fully scored (~13k scorings, ~5 s). Results are deduped by the received
+  players who would start for me, a trade that is a kept trade plus players
+  with no extra gain is dropped, and each partner gets at most three rows.
+  Players whose Sleeper and ESPN projections diverge by 5+ ppg carry `?`.

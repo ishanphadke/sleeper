@@ -20,7 +20,7 @@ def test_every_export_is_mcp_ready():
         doc = (fn.__doc__ or "").strip()
         assert doc, fn.__name__
         assert doc.count(". ") <= 1 and "\n" not in doc, f"{fn.__name__} docstring too long"
-    assert len(tools.EXPORTS) == 18
+    assert len(tools.EXPORTS) == 19
 
 
 def test_draft_id_accepts_urls_and_ids():

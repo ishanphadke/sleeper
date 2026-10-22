@@ -68,34 +68,52 @@ def load_weeks(season: int | str, weeks: list[int], scoring: str, max_age_h: flo
     return {w: doc[str(w)]["pts"] for w in weeks}
 
 
-def best_lineup(pids: list[str], pos_of: dict[str, str], pts: dict[str, float], slots: list[str]) -> tuple[float, list[tuple[str, str]]]:
-    """Highest-scoring legal lineup: fixed slots first, then flex slots from narrowest to widest."""
+def replacement(pts: dict[str, float], rostered: set[str], pos_of: dict[str, str], depth: int = 4) -> dict[str, list[float]]:
+    """Best free-agent projections per position for one week, highest first: what fills an empty slot."""
+    out: dict[str, list[float]] = {}
+    for pid, v in pts.items():
+        pos = pos_of.get(pid)
+        if pid not in rostered and pos and v > 0:
+            out.setdefault(pos, []).append(v)
+    return {pos: sorted(vs, reverse=True)[:depth] for pos, vs in out.items()}
+
+
+def best_lineup(pids: list[str], pos_of: dict[str, str], pts: dict[str, float], slots: list[str],
+                fill: dict[str, list[float]] | None = None) -> tuple[float, list[tuple[str, str, float]]]:
+    """Highest-scoring legal lineup: fixed slots first, then flex slots narrowest to widest.
+
+    A slot no rostered player can fill (bye, injury, empty position) takes the best unused
+    free agent from `fill`, recorded as player id "FA"."""
     pool = sorted((p for p in pids if pts.get(p, 0) > 0), key=lambda p: -pts[p])
     used: set[str] = set()
-    chosen: list[tuple[str, str]] = []
-    starters = [s for s in slots if s in SLOT_ELIGIBLE]
-    for slot in sorted(starters, key=lambda s: len(SLOT_ELIGIBLE[s])):
+    fa_used = {pos: 0 for pos in (fill or {})}
+    chosen: list[tuple[str, str, float]] = []
+    for slot in sorted((s for s in slots if s in SLOT_ELIGIBLE), key=lambda s: len(SLOT_ELIGIBLE[s])):
         pick = next((p for p in pool if p not in used and pos_of.get(p) in SLOT_ELIGIBLE[slot]), None)
         if pick:
             used.add(pick)
-            chosen.append((slot, pick))
-    return round(sum(pts[p] for _, p in chosen), 2), chosen
+            chosen.append((slot, pick, pts[pick]))
+            continue
+        best = max(((fill[pos][fa_used[pos]], pos) for pos in SLOT_ELIGIBLE[slot]
+                    if fill and pos in fill and fa_used[pos] < len(fill[pos])), default=None)
+        if best:
+            fa_used[best[1]] += 1
+            chosen.append((slot, "FA", best[0]))
+    return round(sum(v for _, _, v in chosen), 2), chosen
 
 
-def strength(pids: list[str], pos_of: dict[str, str], weekly: dict[int, dict[str, float]], slots: list[str], playoff_weeks: list[int]) -> dict:
-    """Weekly best-lineup totals and their summaries for one roster."""
-    by_week = {w: best_lineup(pids, pos_of, pts, slots)[0] for w, pts in weekly.items()}
+def strength(pids: list[str], pos_of: dict[str, str], weekly: dict[int, dict[str, float]], slots: list[str],
+             playoff_weeks: list[int], fills: dict[int, dict[str, list[float]]] | None = None) -> dict:
+    """Weekly best-lineup totals for one roster, empty slots filled from waivers, and their summaries."""
+    by_week = {w: best_lineup(pids, pos_of, pts, slots, (fills or {}).get(w))[0] for w, pts in weekly.items()}
     reg = [v for w, v in by_week.items() if w not in playoff_weeks]
     po = [v for w, v in by_week.items() if w in playoff_weeks]
     weights = {w: PLAYOFF_WEIGHT if w in playoff_weeks else 1.0 for w in by_week}
     total_w = sum(weights.values()) or 1.0
-    low = min(by_week, key=by_week.get) if by_week else None
     return {
         "by_week": by_week,
         "ros_ppg": round(sum(by_week.values()) / max(1, len(by_week)), 1),
         "regular_ppg": round(sum(reg) / len(reg), 1) if reg else None,
         "playoff_ppg": round(sum(po) / len(po), 1) if po else None,
-        "score": round(sum(v * weights[w] for w, v in by_week.items()) / total_w, 1),
-        "low_week": low,
-        "low_pts": by_week.get(low) if low is not None else None,
+        "score": round(sum(v * weights[w] for w, v in by_week.items()) / total_w, 2),
     }

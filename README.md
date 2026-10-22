@@ -75,7 +75,8 @@ Output is an aligned text table. Add `--json` to compute over the result. Errors
 | `players <query> [--pos QB] [--limit N]` | search the player dictionary; `--refresh` re-downloads it |
 | `trending [--kind add\|drop] [--hours N]` | most added or dropped across Sleeper |
 | `injuries [--limit N] [--no-save]` | injury and IR changes since the last check: your roster plus the best sidelined players nobody owns |
-| `strength` | every team ranked by rest-of-season best-lineup points per week, playoff weeks weighted |
+| `strength` | every team ranked by rest-of-season best-lineup points per week, playoff weeks weighted, byes filled from waivers |
+| `trades [--partner X] [--tolerance P]` | trades that fix a weak starting slot without costing the partner, ranked by your gain |
 | `drafts [--season N]` | your drafts with status, format and slot |
 | `draft status [--draft ID\|URL]` | on the clock, your next pick, clock estimate, last picks |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -117,6 +118,17 @@ The outlook flags a few things worth knowing about:
   recommendation list and marked `?` until you check the news.
 - **dc** is the player's slot on Sleeper's depth chart. Preseason charts go stale; treat
   it as a prompt, not a fact.
+
+## Trade finder
+
+`sleeper trades` scores every roster by its best legal lineup in each remaining week,
+using Sleeper's weekly projections, with playoff weeks weighted 1.5×. An empty slot from a
+bye or an injury takes the best healthy free agent at that position, so a bye is never a
+reason to trade. It tries every 1-for-1, 2-for-1, 1-for-2 and 2-for-2 swap of QBs, RBs, WRs
+and TEs with each rival, cutting each side's weakest bench player if the roster overflows,
+and keeps a trade only when your lineup improves and the partner's does not get worse.
+A cheap screen on season averages prunes the search, and every survivor is scored week by
+week. Trades that are a kept trade plus throw-ins are dropped.
 
 ## Rate limits
 
@@ -171,4 +183,4 @@ state, and any large `raw` bodies. Deleting the directory costs nothing but a re
 uv run pytest
 ```
 
-162 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.
+170 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.

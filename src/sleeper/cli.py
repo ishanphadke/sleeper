@@ -138,6 +138,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(run=lambda a: tools.injuries(a.league, a.limit, not a.no_save))
     s = sub.add_parser("strength", parents=[common, lg], help="rest-of-season best-lineup points per week for every team")
     s.set_defaults(run=lambda a: tools.strength(a.league))
+    s = sub.add_parser("trades", parents=[common, lg], help="trades that fix a weak starting slot without costing the partner")
+    s.add_argument("--partner", help="team name or owner substring"); s.add_argument("--limit", type=int, default=10)
+    s.add_argument("--tolerance", type=float, default=0.0, help="how many points per week the partner may lose")
+    s.set_defaults(run=lambda a: tools.trades(a.league, a.partner, a.limit, a.tolerance))
     s = sub.add_parser("drafts", parents=[common]); s.add_argument("--season", type=int)
     s.set_defaults(run=lambda a: tools.drafts(a.season))
 
