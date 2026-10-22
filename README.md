@@ -75,6 +75,7 @@ Output is an aligned text table. Add `--json` to compute over the result. Errors
 | `players <query> [--pos QB] [--limit N]` | search the player dictionary; `--refresh` re-downloads it |
 | `trending [--kind add\|drop] [--hours N]` | most added or dropped across Sleeper |
 | `injuries [--limit N] [--no-save]` | injury and IR changes since the last check: your roster plus the best sidelined players nobody owns |
+| `strength` | every team ranked by rest-of-season best-lineup points per week, playoff weeks weighted |
 | `drafts [--season N]` | your drafts with status, format and slot |
 | `draft status [--draft ID\|URL]` | on the clock, your next pick, clock estimate, last picks |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -144,6 +145,12 @@ Worth recording, because the official docs do not mention any of it:
   which pick numbers were pre-filled before the draft starts.
 - Picks are served through a CDN with a 15 second cache; a cache-busting query parameter
   reaches the origin.
+- Weekly projections come from the same undocumented family,
+  `GET https://api.sleeper.app/projections/nfl/{season}/{week}?season_type=regular`. The
+  season endpoint silently ignores a `week=` parameter and returns season totals. A team on
+  bye has a row with no opponent and no points, and an IR player has no points until Sleeper
+  projects his return. Every fantasy position for one week is about 2 MB, so the tool caches
+  each week for twelve hours.
 - There is **no injuries endpoint**. `/v1/players/nfl/injuries`, `/v1/injuries/nfl` and the
   seasonal variants all return 404, and there is no event feed either. Injury data lives in
   the player dictionary and in an undocumented per-player view,
@@ -164,4 +171,4 @@ state, and any large `raw` bodies. Deleting the directory costs nothing but a re
 uv run pytest
 ```
 
-155 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.
+162 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.

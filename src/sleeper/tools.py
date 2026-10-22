@@ -15,6 +15,7 @@ from pathlib import Path
 from . import api
 from . import draft as D
 from . import injuries as I
+from . import lineup as LU
 from . import league as L
 from . import players as P
 from . import rankings as R
@@ -738,7 +739,42 @@ def injuries(league_id: str | None = None, limit: int = I.WATCH_LIMIT, save: boo
     return _noted(out, note)
 
 
+def strength(league_id: str | None = None) -> dict:
+    """Every team's rest-of-season best-lineup points per week from Sleeper's weekly projections, playoff weeks weighted."""
+    lid = _league_id(league_id)
+    note = P.ensure(24 * 7, allow_refresh=False)
+    ctx = _league_ctx(lid)
+    league, table = ctx["league"], P.load()
+    weeks, playoff = LU.season_weeks(league, int(state().get("week") or 1))
+    if not weeks:
+        return _noted({"league": league.get("name", lid), "weeks": "-", "teams": "season over"}, note)
+    weekly = LU.load_weeks(league.get("season") or state()["season"], weeks, R.scoring_for(league))
+    pos_of = {pid: row["position"] for pid, row in table.items()}
+    uid = me()["user_id"]
+    rows = []
+    for r in ctx["rosters"]:
+        pids = list(dict.fromkeys(pid for key in ("players", "reserve") for pid in (r.get(key) or [])))  # players already lists the IR slot
+        st = LU.strength(pids, pos_of, weekly, league.get("roster_positions") or [], playoff)
+        unprojected = [table[pid]["name"] for pid in pids if pid in table and not any(pid in w for w in weekly.values())]
+        team = ctx["teams"][r["roster_id"]]
+        rows.append({
+            "team": team["team_name"][:22], "mine": r.get("owner_id") == uid, "record": team["record"],
+            "score": st["score"], "ros_ppg": st["ros_ppg"], "regular": st["regular_ppg"], "playoffs": st["playoff_ppg"],
+            "low_week": f"wk {st['low_week']}: {st['low_pts']}" if st["low_week"] else "-",
+            "no_proj": len(unprojected),
+        })
+    rows.sort(key=lambda x: -x["score"])
+    for i, row in enumerate(rows, 1):
+        row["rank"] = i
+    out = {
+        "league": league.get("name", lid),
+        "weeks": f"{weeks[0]}-{weeks[-1]}" + (f", playoffs {playoff[0]}-{playoff[-1]} weighted x{LU.PLAYOFF_WEIGHT}" if playoff else ""),
+        "teams": [{"rank": r.pop("rank"), **r} for r in rows],
+    }
+    return _noted(out, note)
+
+
 EXPORTS = [
     whoami, leagues, league, roster, matchups, transactions, players, trending,
-    drafts, draft_status, draft_picks, draft_available, draft_outlook, draft_plan, draft_wait, plan, injuries,
+    drafts, draft_status, draft_picks, draft_available, draft_outlook, draft_plan, draft_wait, plan, injuries, strength,
 ]

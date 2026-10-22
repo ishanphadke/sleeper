@@ -31,6 +31,7 @@ compute over the result. Errors print `error: ...` on stderr with exit 1.
 | `players <query> [--pos QB] [--limit N]` / `players --refresh` | dictionary search / re-download |
 | `trending [--kind add\|drop] [--hours N] [--limit N]` | most added/dropped across Sleeper |
 | `injuries [--league ID] [--limit N] [--no-save]` | injury and IR changes since the last check: my roster plus the best unowned sidelined players, one `/v1/players/nfl/<id>` call each; each run saves a snapshot, `--no-save` reports without moving it |
+| `strength [--league ID]` | every team ranked by rest-of-season best-lineup points per week, from Sleeper's weekly projections, playoff weeks weighted; `low_week` is each team's weakest remaining week (byes, injuries) |
 | `drafts [--season N]` | my drafts with status, format and my slot |
 | `draft status [--draft ID\|URL]` | on the clock, my next pick, clock estimate, last 5 picks (cheap, no dictionary) |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -188,3 +189,10 @@ avoid = ["Christian McCaffrey"]
   only writes the baseline. Sleeper has no injuries endpoint and no event
   feed: this is a snapshot diff, and the per-player view is CDN-cached about
   ten minutes, so checking more often than that adds nothing.
+- `strength` scores each roster by its best legal lineup in every remaining week
+  through the fantasy final, using Sleeper's weekly projections (byes and IR
+  weeks score zero), then averages with playoff weeks weighted 1.5×. `score`
+  is that weighted average and decides the rank; `regular` and `playoffs`
+  split it. It sees only projections: an IR stash projects zero until Sleeper
+  projects his return, so `no_proj` counts rostered players with no
+  projection in any remaining week.

@@ -814,3 +814,16 @@ Where the code differs from the sections above, the code is right:
   their ADP get a reserved row in `top`; TE rows leave the late `top` once TE
   is filled and the bench is nearly full; `my_next_round` dropped from the
   outlook status to hold the 50-line budget.
+- 2026-10-22 — weekly projections and lineup strength, the first step toward
+  a trade finder. Verified `GET /projections/nfl/<season>/<week>` returns one row
+  per player for that week with `opponent`, `game_id`, `date` and the stats block
+  (`pts_ppr` matches a hand recomputation at 4-pt pass TD); `?week=` on the
+  season path is ignored. Byes: row present, `opponent` and points null. IR:
+  points null in every week until a return is projected, so stashes score zero.
+  Ten weeks of all positions is ~21 MB, hence a 12 h per-week cache in
+  `weekly.<season>.<scoring>.json`. `lineup.py` fills fixed slots first, then
+  flex slots narrowest to widest, which is optimal for nested eligibility.
+  `strength` ranks teams by best-lineup points per remaining week through the
+  last playoff round (`playoff_week_start` + log2(teams) − 1), playoffs 1.5×.
+  Sleeper's `players` list already includes the IR slot; adding `reserve`
+  double-counts.

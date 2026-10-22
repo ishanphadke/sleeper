@@ -136,6 +136,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("injuries", parents=[common, lg], help="injury/IR changes since the last check")
     s.add_argument("--limit", type=int, default=tools.I.WATCH_LIMIT); s.add_argument("--no-save", action="store_true", help="report without moving the snapshot forward")
     s.set_defaults(run=lambda a: tools.injuries(a.league, a.limit, not a.no_save))
+    s = sub.add_parser("strength", parents=[common, lg], help="rest-of-season best-lineup points per week for every team")
+    s.set_defaults(run=lambda a: tools.strength(a.league))
     s = sub.add_parser("drafts", parents=[common]); s.add_argument("--season", type=int)
     s.set_defaults(run=lambda a: tools.drafts(a.season))
 
