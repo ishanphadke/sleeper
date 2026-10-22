@@ -878,8 +878,8 @@ def trades(league_id: str | None = None, partner: str | None = None, limit: int 
             "get": ", ".join(name(p) for p in t["get"]),
             "my_gain": t["my_gain"], "their_gain": t["their_gain"],
             "fixes": f"{name(t['hole']) if not t['hole'].startswith('FA:') else 'waiver ' + t['hole'][3:]} ({t['hole_margin']:+} over waivers) -> {name(t['filled_by'])}",
-            **({"their_fix": (f"{name(t['their_hole']) if not t['their_hole'].startswith('FA:') else 'waiver ' + t['their_hole'][3:]}"
-                              f" ({t['their_hole_margin']:+}) -> {name(t['their_filled_by'])}") if t["their_hole"] else "-"} if mutual else {}),
+            "their_fix": (f"{name(t['their_hole']) if not t['their_hole'].startswith('FA:') else 'waiver ' + t['their_hole'][3:]}"
+                          f" ({t['their_hole_margin']:+}) -> {name(t['their_filled_by'])}") if t["their_hole"] else "-",
             "value": f"{t['value_give']} for {t['value_get']}",
             "cuts": ", ".join(x for x in (f"me: {name(t['i_cut'])}" if t["i_cut"] else "", f"them: {name(t['they_cut'])}" if t["they_cut"] else "") if x) or "-",
         } for t in found] or "-",
