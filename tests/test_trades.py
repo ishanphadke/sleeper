@@ -124,3 +124,14 @@ def test_by_slot_keeps_flex_separate_from_the_position():
     lineup = [("RB", "r1", 16.0), ("RB", "r2", 15.0), ("FLEX", "r3", 14.0), ("WR", "w1", 17.0)]
     assert TR.by_slot(lineup) == {"RB": 31.0, "FLEX": 14.0, "WR": 17.0}
     assert TR.by_position(lineup, POS) == {"RB": 45.0, "WR": 17.0}
+
+
+def test_bad_offense_players_are_never_received_and_sell_requires_sending_one():
+    team_of = {p: "GOOD" for p in POS}
+    team_of["w5"] = "BAD"                                  # the WR that fixes my hole plays on a bad offense
+    me, them = _side("me", ME), _side("them", THEM)
+    found = _find(me, them, MIRROR, bad_teams=frozenset({"BAD"}), team_of=team_of)
+    assert found and not any("w5" in t["get"] for t in found)
+    team_of["r6"] = "BAD"                                  # my bench RB plays on one
+    sold = _find(me, them, MIRROR, bad_teams=frozenset({"BAD"}), team_of=team_of, sell=True)
+    assert sold and all("r6" in t["give"] for t in sold)

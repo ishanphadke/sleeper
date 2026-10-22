@@ -16,6 +16,7 @@ from itertools import combinations
 from . import lineup as LU
 
 TRADE_POSITIONS = frozenset({"QB", "RB", "WR", "TE"})
+PASSING_POSITIONS = frozenset({"QB", "WR", "TE"})
 MIN_GAIN = 0.5
 PER_PARTNER = 3
 HOLE_MARGIN = 3.5     # a starter within this many ppg of the best healthy free agent is a hole worth trading for
@@ -137,13 +138,16 @@ def _padded(t: dict, kept: list[dict]) -> bool:
 
 def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fills: dict[int, dict[str, list[float]]],
          fill: dict[str, list[float]], pos_of: dict[str, str], slots: list[str], playoff: list[int], limit: int,
-         tolerance: float = 0.0, need: str | None = None, hold: frozenset[str] = frozenset()) -> list[dict]:
+         tolerance: float = 0.0, need: str | None = None, hold: frozenset[str] = frozenset(),
+         bad_teams: frozenset[str] = frozenset(), team_of: dict[str, str] | None = None, sell: bool = False) -> list[dict]:
     """Trades ranked by my gain in weighted points per week, keeping only those the partner does not lose by more than `tolerance`.
 
     `me` and each rival are {"name", "players", "reserve", "limit"}. `fills` holds each week's best
     healthy free agents (a bye is streamed); `fill` the best healthy free agents by season average.
     `need` (a position) requires the trade to raise my starting points there and fill a hole with a
-    player of that position; `hold` (positions) lets the points in their dedicated slots, flex excluded, drop by at most HOLD_TOLERANCE."""
+    player of that position; `hold` (positions) lets the points in their dedicated slots, flex excluded, drop by at most HOLD_TOLERANCE.
+    `bad_teams` are poor passing offenses: their QBs, WRs and TEs are never received, and with `sell`
+    every trade must send away at least one of my players on one of them."""
     avg = ros_avg(weekly)
 
     def season(roster):
@@ -159,6 +163,10 @@ def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fill
     for rv in rivals:
         base_rv = season(rv["players"])[0]
         for gs, rs in candidates(me["players"], rv["players"], pos_of, avg):
+            if bad_teams and any((team_of or {}).get(p) in bad_teams and pos_of.get(p) in PASSING_POSITIONS for p in rs):
+                continue
+            if sell and not any((team_of or {}).get(p) in bad_teams for p in gs):
+                continue
             ok, gv, rv_val = fair(gs, rs, avg, pos_of, fill)
             if not ok:
                 continue

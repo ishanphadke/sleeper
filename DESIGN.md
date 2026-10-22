@@ -861,3 +861,15 @@ Where the code differs from the sections above, the code is right:
   trades pass the screen but none survives a strict partner-gain >= 0 in the
   full weekly score: in this league a WR upgrade that holds RB costs the
   partner 0.3-1.0 ppw, so `--tolerance 1` is the practical setting.
+- 2026-10-22 — offense quality (`offense.py`). Ishan wants to move players off
+  bad offenses (his example: McConkey, Chargers "19th in passing yards, 30th in
+  TDs"). Sleeper has no team stats or standings; summing player `pass_yd`/
+  `pass_td` from `/stats/nfl/<season>` by team gave LAC 27th/27th on totals and
+  28th combined per game — the 0-6 record cannot be checked from Sleeper.
+  Season totals mislead mid-season (byes), so ranks are per game. Then the
+  Bears point: a season average blends a starter with his backups (Bagent wk 4,
+  Keenum/Bagent wk 5, Williams back wk 6), so `--bad-offense` ranks each team's
+  last 3 games from `/stats/nfl/<season>/<week>` (cached per finished week)
+  and prints the starting QB per week beside the season rank. Recent form
+  still drags CHI to 22nd after Williams returned (12th on his game alone):
+  the table is there for judgment, not a verdict.

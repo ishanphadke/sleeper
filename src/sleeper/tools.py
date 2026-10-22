@@ -17,6 +17,7 @@ from . import draft as D
 from . import injuries as I
 from . import lineup as LU
 from . import trades as TR
+from . import offense as OF
 from . import league as L
 from . import players as P
 from . import rankings as R
@@ -784,7 +785,8 @@ def strength(league_id: str | None = None) -> dict:
 
 
 def trades(league_id: str | None = None, partner: str | None = None, limit: int = 10, tolerance: float = 0.0,
-           need: str | None = None, hold: str | None = None) -> dict:
+           need: str | None = None, hold: str | None = None, bad_offense: int = 0, sell: bool = False,
+           offense_games: int = 3) -> dict:
     """Trades that lift a weak starting slot of mine without costing the partner, ranked by my weighted points per week gained."""
     lid = _league_id(league_id)
     note = P.ensure(24 * 7, allow_refresh=False)
@@ -822,21 +824,46 @@ def trades(league_id: str | None = None, partner: str | None = None, limit: int 
     rank = R.rank_of(R.load(league.get("season") or state()["season"], R.scoring_for(league)), table)
     suspect = {pid for pid in rostered_all if (k := rank(pid)).get("sl_ppg") is not None and k.get("espn_ppg") is not None
                and abs(k["sl_ppg"] - k["espn_ppg"]) >= STALE_DIVERGENCE}
-    name = lambda pid: (table[pid]["name"] + (" ?" if pid in suspect else "")) if pid in table else ("waiver" if pid == "FA" else f"#{pid}")
+    def name(pid):
+        if pid == "FA":
+            return "waiver"
+        if pid not in table:
+            return f"#{pid}"
+        t = table[pid].get("team")
+        tag = f" [{t} {OF.ordinal(off[t]['rank'])} pass]" if bad_offense and t in bad_teams else ""
+        return table[pid]["name"] + (" ?" if pid in suspect else "") + tag
     before = TR.my_slots(me_side["players"], pos_of, avg, slots, fill)
     need_pos = need.upper() if need else None
     hold_pos = frozenset(x.strip().upper() for x in (hold or "").split(",") if x.strip())
     for pos in ({need_pos} if need_pos else set()) | hold_pos:
         if pos not in TR.TRADE_POSITIONS:
             raise SleeperError(f"--need/--hold take QB, RB, WR or TE, not {pos!r}")
-    found = TR.find(me_side, rivals, weekly, fills, fill, pos_of, slots, playoff, limit, tolerance, need_pos, hold_pos)
+    if sell and not bad_offense:
+        raise SleeperError("--sell needs --bad-offense N (how many of the worst passing offenses count as bad)")
+    season_off = OF.passing(league.get("season") or state()["season"]) if bad_offense else {}
+    if bad_offense and offense_games:
+        off, off_weeks = OF.recent(league.get("season") or state()["season"], int(state().get("week") or 1), offense_games)
+    else:
+        off, off_weeks = season_off, []
+    bad_teams = OF.bad(off, bad_offense) if bad_offense else frozenset()
+    team_of = {pid: row.get("team") for pid, row in table.items()}
+    found = TR.find(me_side, rivals, weekly, fills, fill, pos_of, slots, playoff, limit, tolerance, need_pos, hold_pos,
+                    bad_teams, team_of, sell)
 
     out = {
         "league": league.get("name", lid),
         "weeks": f"{weeks[0]}-{weeks[-1]}" + (f", playoffs {playoff[0]}-{playoff[-1]} x{LU.PLAYOFF_WEIGHT}" if playoff else ""),
         **({"rules": " | ".join(x for x in (f"must upgrade {need_pos}" if need_pos else "",
-                                             f"hold {', '.join(sorted(hold_pos))} within {TR.HOLD_TOLERANCE} ppg" if hold_pos else "") if x)}
-           if need_pos or hold_pos else {}),
+                                             f"hold {', '.join(sorted(hold_pos))} within {TR.HOLD_TOLERANCE} ppg" if hold_pos else "",
+                                             f"no QB/WR/TE from the {bad_offense} worst passing offenses" if bad_offense else "",
+                                             "must send one of my players on them" if sell else "") if x)}
+           if need_pos or hold_pos or bad_offense else {}),
+        **({"offense_basis": f"each team's last {offense_games} games played (from weeks {off_weeks[0]}-{off_weeks[-1]}, so byes are skipped)" if off_weeks else "season"}
+           if bad_offense else {}),
+        **({"bad_offense_table": [{"team": t, "rank": off[t]["rank"], "season_rank": season_off.get(t, {}).get("rank"),
+                                   "yd_g": round(off[t]["ypg"]), "td_g": off[t]["tdpg"], "qbs": off[t].get("qbs", "-")}
+                                  for t in sorted(off, key=lambda t: -off[t]["rank"]) if t in bad_teams or
+                                  (season_off.get(t, {}).get("rank", 0) > len(season_off) - bad_offense)]} if bad_offense else {}),
         "my_slots": [{"slot": r["slot"], "starter": name(r["pid"]), "ppg": r["ppg"], "best_waiver": r["waiver"], "margin": r["margin"],
                       "hole": "yes" if r["margin"] < TR.HOLE_MARGIN and LU.SLOT_ELIGIBLE[r["slot"]] & TR.TRADE_POSITIONS
                       else ("waivers" if not LU.SLOT_ELIGIBLE[r["slot"]] & TR.TRADE_POSITIONS else "-")} for r in before],

@@ -76,7 +76,7 @@ Output is an aligned text table. Add `--json` to compute over the result. Errors
 | `trending [--kind add\|drop] [--hours N]` | most added or dropped across Sleeper |
 | `injuries [--limit N] [--no-save]` | injury and IR changes since the last check: your roster plus the best sidelined players nobody owns |
 | `strength` | every team ranked by rest-of-season best-lineup points per week, playoff weeks weighted, byes filled from waivers |
-| `trades [--partner X] [--need WR] [--hold RB,QB] [--tolerance P]` | trades that fix a weak starting slot without costing the partner, ranked by your gain |
+| `trades [--partner X] [--need WR] [--hold RB,QB] [--bad-offense N] [--sell] [--tolerance P]` | trades that fix a weak starting slot without costing the partner, ranked by your gain |
 | `drafts [--season N]` | your drafts with status, format and slot |
 | `draft status [--draft ID\|URL]` | on the clock, your next pick, clock estimate, last picks |
 | `draft picks [--round N] [--team X] [--last N]` | picks made so far, names included |
@@ -141,6 +141,9 @@ only if all of these hold:
 `--need WR` keeps only trades that upgrade your receivers, and `--hold RB,QB` keeps your
 running back and quarterback slots within half a point a game (the flex is not held, so a
 flex back can be traded for a receiver). `--tolerance` lets the partner lose a little.
+`--bad-offense 8` refuses quarterbacks, receivers and tight ends from the eight worst passing
+offenses, ranked per game over each team's last three games so a quarterback change shows up,
+and `--sell` requires each trade to send away one of yours from those offenses.
 
 A cheap screen on season averages prunes the search and every survivor is scored week by
 week. Trades that are a kept trade plus throw-ins are dropped.
@@ -178,6 +181,9 @@ Worth recording, because the official docs do not mention any of it:
   bye has a row with no opponent and no points, and an IR player has no points until Sleeper
   projects his return. Every fantasy position for one week is about 2 MB, so the tool caches
   each week for twelve hours.
+- Player stats follow the same pattern: `GET https://api.sleeper.app/stats/nfl/{season}` for
+  season totals and `/stats/nfl/{season}/{week}` for one week, each row tagged with the player's
+  team. There is no team-stats or standings endpoint, so team passing is summed from players.
 - There is **no injuries endpoint**. `/v1/players/nfl/injuries`, `/v1/injuries/nfl` and the
   seasonal variants all return 404, and there is no event feed either. Injury data lives in
   the player dictionary and in an undocumented per-player view,
@@ -198,4 +204,4 @@ state, and any large `raw` bodies. Deleting the directory costs nothing but a re
 uv run pytest
 ```
 
-176 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.
+182 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.
