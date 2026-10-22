@@ -191,22 +191,28 @@ avoid = ["Christian McCaffrey"]
   feed: this is a snapshot diff, and the per-player view is CDN-cached about
   ten minutes, so checking more often than that adds nothing.
 - `strength` scores each roster by its best legal lineup in every remaining week
-  through the fantasy final, using Sleeper's weekly projections , then averages with playoff weeks weighted 1.5×. An empty slot (bye, injury)
-  takes the best healthy free agent at that position that week, so a bye costs
-  only the gap to waivers. `score`
+  through the fantasy final, using Sleeper's weekly projections , then averages with playoff weeks weighted 1.5×. The lineup is set once
+  from rest-of-season averages and held; a starter on bye or hurt is covered
+  by the better of the bench and the best healthy free agent that week, so a
+  bye costs only the gap to waivers. `score`
   is that weighted average and decides the rank; `regular` and `playoffs`
   split it. It sees only projections: an IR stash projects zero until Sleeper
   projects his return, so `no_proj` counts rostered players with no
   projection in any remaining week.
-- `trades` follows Ishan's rule: **byes are never a reason to trade** (waivers
-  cover them); a trade must fix a starting slot that is weak across the
-  season. `my_slots` is that diagnosis: `margin` is the starter's projected
-  ppg minus the best healthy free agent's at the slot, so a small or negative
-  margin is a hole. Each trade row shows `my_gain` and `their_gain` in
-  playoff-weighted points per week, `fixes` (the starting slot it upgrades)
-  and `cuts` (who each side must drop to stay at the roster limit). The
-  partner never loses unless `--tolerance` allows it. `?` after a name means
-  Sleeper and ESPN disagree by 5+ ppg on him: check news before proposing.
-  Wide receiver projections were the least reliable in the 2025 check, so a
-  WR-for-RB trade deserves a second look. Advise from the top rows in two or
-  three lines; the tool cannot propose a trade, Ishan does that in the app.
+- `trades` follows Ishan's rules: **byes are never a reason to trade**
+  (waivers cover them), and a trade must fix a starting slot that is weak
+  across the season. Three checks enforce it. Lineups are set once from
+  rest-of-season averages and held, so a backup earns nothing for start/sit
+  calls made with hindsight. A trade must move a hole starter (`hole: yes` in
+  `my_slots`, within 3.5 ppg of the best healthy free agent) out of the
+  lineup, and the newcomer who takes the slot must out-project him by 1+ ppg.
+  And it must be fair: `value` is each side's points per game over waivers,
+  given `for` received, and I never receive more than 15% (or 1 ppg) more
+  than I send. Each row shows `my_gain` and `their_gain` in playoff-weighted
+  points per week, `fixes` (the hole and who fills it) and `cuts` (who each
+  side drops to stay at the roster limit). The partner never loses unless
+  `--tolerance` allows it. `?` after a name means Sleeper and ESPN disagree by
+  5+ ppg on him: check news before proposing. Wide receiver projections were
+  the least reliable in the 2025 check, so a WR-for-RB trade deserves a second
+  look. Advise from the top rows in two or three lines; the tool cannot
+  propose a trade, Ishan does that in the app.

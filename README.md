@@ -121,13 +121,24 @@ The outlook flags a few things worth knowing about:
 
 ## Trade finder
 
-`sleeper trades` scores every roster by its best legal lineup in each remaining week,
-using Sleeper's weekly projections, with playoff weeks weighted 1.5×. An empty slot from a
-bye or an injury takes the best healthy free agent at that position, so a bye is never a
-reason to trade. It tries every 1-for-1, 2-for-1, 1-for-2 and 2-for-2 swap of QBs, RBs, WRs
-and TEs with each rival, cutting each side's weakest bench player if the roster overflows,
-and keeps a trade only when your lineup improves and the partner's does not get worse.
-A cheap screen on season averages prunes the search, and every survivor is scored week by
+`sleeper trades` scores every roster by a lineup set once from rest-of-season averages and
+held through each remaining week, using Sleeper's weekly projections, with playoff weeks
+weighted 1.5×. A starter on bye or hurt is covered by the better of the bench and the best
+healthy free agent that week, so a bye is never a reason to trade, and a backup earns
+nothing for start/sit calls only hindsight could make.
+
+It tries every 1-for-1, 2-for-1, 1-for-2 and 2-for-2 swap of QBs, RBs, WRs and TEs with each
+rival, cutting each side's weakest bench player if the roster overflows. A trade survives
+only if all of these hold:
+
+- it moves a **hole** out of your lineup: a starter within 3.5 points a game of the best
+  healthy free agent at his slot, replaced by a newcomer who projects at least a point
+  better;
+- it is **fair**: measured as points per game over waivers, you receive no more than 15%
+  (or one point) more than you send, since no manager accepts more;
+- your lineup improves and the partner's does not get worse.
+
+A cheap screen on season averages prunes the search and every survivor is scored week by
 week. Trades that are a kept trade plus throw-ins are dropped.
 
 ## Rate limits
@@ -183,4 +194,4 @@ state, and any large `raw` bodies. Deleting the directory costs nothing but a re
 uv run pytest
 ```
 
-170 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.
+174 tests, no network access. Fixtures are captured API responses in `tests/fixtures`.

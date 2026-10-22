@@ -1,5 +1,11 @@
 """Trade finder: trades that lift a weak starting slot of mine without weakening the partner.
 
+Three rules keep the suggestions to trades a manager would make and accept:
+- lineups are set once from rest-of-season averages and held, so a backup gets no credit
+  for hindsight start/sit calls; byes and injuries are covered from the bench or waivers;
+- a trade must replace a starter who is within HOLE_MARGIN of waivers (a real hole);
+- value over waivers received may exceed value given by at most FAIR_PCT / FAIR_ABS.
+
 Every candidate is scored by best-lineup points per remaining week for both rosters, before
 and after, with empty slots filled from waivers (so byes are never a reason to trade). A cheap
 screen on rest-of-season averages cuts the search; every survivor gets the full week-by-week score."""
@@ -12,16 +18,13 @@ from . import lineup as LU
 TRADE_POSITIONS = frozenset({"QB", "RB", "WR", "TE"})
 MIN_GAIN = 0.5
 PER_PARTNER = 3
+HOLE_MARGIN = 3.5     # a starter within this many ppg of the best healthy free agent is a hole worth trading for
+FAIR_PCT = 0.15       # I may receive at most 15% more value over waivers than I give...
+FAIR_ABS = 1.0        # ...or 1 ppg more, whichever is larger; beyond that no manager accepts
+HOLE_UPGRADE = 1.0    # the newcomer must out-project the starter he replaces by this much: a lateral swap fixes nothing
 
 
-def ros_avg(weekly: dict[int, dict[str, float]]) -> dict[str, float]:
-    """Projected points per game played over the remaining weeks (byes left out)."""
-    tot: dict[str, list[float]] = {}
-    for pts in weekly.values():
-        for pid, v in pts.items():
-            tot.setdefault(pid, []).append(v)
-    n = max(1, len(weekly))
-    return {pid: sum(v) / len(v) for pid, v in tot.items() if len(v) >= n / 2}
+ros_avg = LU.ros_avg
 
 
 def after_trade(roster: list[str], out: tuple[str, ...], into: tuple[str, ...], limit: int, avg: dict[str, float],
@@ -45,6 +48,54 @@ def my_slots(roster: list[str], pos_of: dict[str, str], avg: dict[str, float], s
         repl = max((fill.get(pos, [0.0])[0] for pos in LU.SLOT_ELIGIBLE[slot] if fill.get(pos)), default=0.0)
         rows.append({"slot": slot, "pid": pid, "ppg": round(pts, 1), "waiver": round(repl, 1), "margin": round(pts - repl, 1)})
     return rows
+
+
+def slot_repl(slot: str, fill: dict[str, list[float]]) -> float:
+    return max((fill[pos][0] for pos in LU.SLOT_ELIGIBLE[slot] if fill.get(pos)), default=0.0)
+
+
+def value(pid: str, avg: dict[str, float], pos_of: dict[str, str], fill: dict[str, list[float]]) -> float:
+    """Points per game over the best healthy free agent at his position: what the market pays for."""
+    return max(0.0, avg.get(pid, 0.0) - (fill.get(pos_of.get(pid), [0.0]) or [0.0])[0])
+
+
+def holes(lineup: list[tuple[str, str, float]], fill: dict[str, list[float]]) -> dict[str, tuple[str, float]]:
+    """{starter (or "FA:<slot>" for a waiver fill-in): (slot, margin)} for tradeable slots within HOLE_MARGIN of waivers.
+
+    Kicker and defense are left out: they stream from waivers and are never traded for."""
+    out = {}
+    for slot, pid, pts in lineup:
+        if not LU.SLOT_ELIGIBLE[slot] & TRADE_POSITIONS:
+            continue
+        margin = pts - slot_repl(slot, fill)
+        if pid == "FA" or margin < HOLE_MARGIN:
+            out[pid if pid != "FA" else f"FA:{slot}"] = (slot, round(margin, 1))
+    return out
+
+
+def fixes_hole(before: list[tuple[str, str, float]], after: list[tuple[str, str, float]], into: tuple[str, ...],
+               hole: dict[str, tuple[str, float]]) -> tuple[str, str] | None:
+    """(hole starter who loses his job, the received player who takes that slot) when the trade fills a hole, else None."""
+    slot_after = {pid: slot for slot, pid, _ in after}
+    new_starters = [p for p in into if p in slot_after]
+    if not new_starters:
+        return None
+    vacated = [p for p in hole if (p.startswith("FA:") and sum(1 for _, x, _ in after if x == "FA") < sum(1 for _, x, _ in before if x == "FA"))
+               or (not p.startswith("FA:") and p not in slot_after)]
+    pts_before = {(pid if pid != "FA" else f"FA:{slot}"): v for slot, pid, v in before}
+    pts_after = {pid: v for _, pid, v in after}
+    for h in vacated:                                  # pair each vacated hole with a newcomer who is a real upgrade, same slot first
+        takers = sorted((p for p in new_starters if pts_after[p] - pts_before[h] >= HOLE_UPGRADE),
+                        key=lambda p: (slot_after[p] != hole[h][0], -pts_after[p]))
+        if takers:
+            return h, takers[0]
+    return None
+
+
+def fair(give: tuple[str, ...], get: tuple[str, ...], avg, pos_of, fill) -> tuple[bool, float, float]:
+    g = sum(value(p, avg, pos_of, fill) for p in give)
+    r = sum(value(p, avg, pos_of, fill) for p in get)
+    return r <= g + max(FAIR_ABS, FAIR_PCT * g), round(g, 1), round(r, 1)
 
 
 def candidates(mine: list[str], theirs: list[str], pos_of: dict[str, str], avg: dict[str, float]) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
@@ -76,38 +127,45 @@ def find(me: dict, rivals: list[dict], weekly: dict[int, dict[str, float]], fill
     avg = ros_avg(weekly)
 
     def season(roster):
-        return LU.best_lineup(roster, pos_of, avg, slots, fill)[0]
+        return LU.best_lineup(roster, pos_of, avg, slots, fill)
 
     def full(roster):
-        return LU.strength(roster, pos_of, weekly, slots, playoff, fills)["score"]
+        return LU.strength(roster, pos_of, weekly, slots, playoff, fills, avg, fill)["score"]
 
-    base_me = season(me["players"])
+    base_total, base_lineup = season(me["players"])
+    my_holes = holes(base_lineup, fill)
     screened = []
     for rv in rivals:
-        base_rv = season(rv["players"])
+        base_rv = season(rv["players"])[0]
         for gs, rs in candidates(me["players"], rv["players"], pos_of, avg):
+            ok, gv, rv_val = fair(gs, rs, avg, pos_of, fill)
+            if not ok:
+                continue
             mine_after, my_cut = after_trade(me["players"], gs, rs, me["limit"], avg, pos_of, slots, fill, me["reserve"])
-            gain = season(mine_after) - base_me
-            if gain < MIN_GAIN:
+            total_after, lineup_after = season(mine_after)
+            if total_after - base_total < MIN_GAIN:
+                continue
+            fixed = fixes_hole(base_lineup, lineup_after, rs, my_holes)
+            if fixed is None:
                 continue
             theirs_after, their_cut = after_trade(rv["players"], rs, gs, rv["limit"], avg, pos_of, slots, fill, rv["reserve"])
-            their_gain = season(theirs_after) - base_rv
-            if their_gain < -tolerance - 1.0:          # the screen is approximate; leave a margin for the full score
+            if season(theirs_after)[0] - base_rv < -tolerance - 1.0:   # the screen is approximate; leave a margin for the full score
                 continue
-            screened.append((gain, rv, gs, rs, mine_after, theirs_after, my_cut, their_cut))
+            screened.append((total_after - base_total, rv, gs, rs, mine_after, theirs_after, my_cut, their_cut, fixed, gv, rv_val))
     screened.sort(key=lambda x: -x[0])
 
     full_me = full(me["players"])
     full_base = {rv["name"]: full(rv["players"]) for rv in rivals}
     out = []
-    for gain, rv, gs, rs, mine_after, theirs_after, my_cut, their_cut in screened:   # every survivor: a global cut hid whole partners
+    for gain, rv, gs, rs, mine_after, theirs_after, my_cut, their_cut, fixed, gv, rv_val in screened:   # every survivor: a global cut hid whole partners
         mg = full(mine_after) - full_me
         tg = full(theirs_after) - full_base[rv["name"]]
         if mg < MIN_GAIN or tg < -tolerance:
             continue
         starts = {pid for _, pid, _ in LU.best_lineup(mine_after, pos_of, avg, slots, fill)[1]}
         out.append({"partner": rv["name"], "give": gs, "get": rs, "my_gain": round(mg, 1), "their_gain": round(tg, 1),
-                    "i_cut": my_cut, "they_cut": their_cut, "core": frozenset(p for p in rs if p in starts)})
+                    "i_cut": my_cut, "they_cut": their_cut, "core": frozenset(p for p in rs if p in starts),
+                    "hole": fixed[0], "hole_margin": my_holes[fixed[0]][1], "filled_by": fixed[1], "value_give": gv, "value_get": rv_val})
     # Leanest version of each package first, so throw-ins that change nothing collapse into it.
     out.sort(key=lambda t: (-t["my_gain"], -t["their_gain"], len(t["give"]) + len(t["get"])))
     seen, per_partner, best = set(), {}, []

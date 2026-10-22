@@ -102,10 +102,56 @@ def best_lineup(pids: list[str], pos_of: dict[str, str], pts: dict[str, float], 
     return round(sum(v for _, _, v in chosen), 2), chosen
 
 
+def ros_avg(weekly: dict[int, dict[str, float]]) -> dict[str, float]:
+    """Projected points per game played over the remaining weeks (byes left out); players projected in under half of them are dropped."""
+    tot: dict[str, list[float]] = {}
+    for pts in weekly.values():
+        for pid, v in pts.items():
+            tot.setdefault(pid, []).append(v)
+    n = max(1, len(weekly))
+    return {pid: sum(v) / len(v) for pid, v in tot.items() if len(v) >= n / 2}
+
+
+def _fixed_week(plan: list[tuple[str, str, float]], bench: list[str], pos_of: dict[str, str], pts: dict[str, float],
+                fill: dict[str, list[float]] | None) -> float:
+    """One week of a lineup set in advance: each starter scores his projection; a starter on bye or hurt is
+    replaced by the best bench player or free agent who can fill the slot that week (byes are known ahead)."""
+    used: set[str] = set()
+    fa_used = {pos: 0 for pos in (fill or {})}
+    total = 0.0
+    for slot, pid, _ in plan:
+        v = pts.get(pid) if pid != "FA" else None
+        if v:
+            total += v
+            continue
+        sub = max(((pts[b], b) for b in bench if b not in used and pos_of.get(b) in SLOT_ELIGIBLE[slot] and pts.get(b, 0) > 0),
+                  default=None)
+        fa = max(((fill[pos][fa_used[pos]], pos) for pos in SLOT_ELIGIBLE[slot]
+                  if fill and pos in fill and fa_used[pos] < len(fill[pos])), default=None)
+        if sub and (not fa or sub[0] >= fa[0]):
+            used.add(sub[1])
+            total += sub[0]
+        elif fa:
+            fa_used[fa[1]] += 1
+            total += fa[0]
+    return round(total, 2)
+
+
 def strength(pids: list[str], pos_of: dict[str, str], weekly: dict[int, dict[str, float]], slots: list[str],
-             playoff_weeks: list[int], fills: dict[int, dict[str, list[float]]] | None = None) -> dict:
-    """Weekly best-lineup totals for one roster, empty slots filled from waivers, and their summaries."""
-    by_week = {w: best_lineup(pids, pos_of, pts, slots, (fills or {}).get(w))[0] for w, pts in weekly.items()}
+             playoff_weeks: list[int], fills: dict[int, dict[str, list[float]]] | None = None,
+             avg: dict[str, float] | None = None, season_fill: dict[str, list[float]] | None = None) -> dict:
+    """Weekly lineup totals for one roster and their summaries.
+
+    With `avg`, the lineup is set once from rest-of-season averages and held, which is how a manager
+    actually plays it; without, each week takes its own best lineup, which credits a backup with
+    hindsight start/sit calls nobody can make. Empty slots are filled from waivers either way."""
+    if avg is None:
+        by_week = {w: best_lineup(pids, pos_of, pts, slots, (fills or {}).get(w))[0] for w, pts in weekly.items()}
+    else:
+        _, plan = best_lineup(pids, pos_of, avg, slots, season_fill)
+        starters = {pid for _, pid, _ in plan}
+        bench = [p for p in pids if p not in starters]
+        by_week = {w: _fixed_week(plan, bench, pos_of, pts, (fills or {}).get(w)) for w, pts in weekly.items()}
     reg = [v for w, v in by_week.items() if w not in playoff_weeks]
     po = [v for w, v in by_week.items() if w in playoff_weeks]
     weights = {w: PLAYOFF_WEIGHT if w in playoff_weeks else 1.0 for w in by_week}

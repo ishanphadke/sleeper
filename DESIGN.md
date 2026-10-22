@@ -841,3 +841,16 @@ Where the code differs from the sections above, the code is right:
   players who would start for me, a trade that is a kept trade plus players
   with no extra gain is dropped, and each partner gets at most three rows.
   Players whose Sleeper and ESPN projections diverge by 5+ ppg carry `?`.
+- 2026-10-22 — Ishan challenged a suggestion (Downs for RJ Harvey and Dak
+  Prescott): its +1.3 was +0.9 real (Harvey over Downs) and +0.5 from
+  re-picking the best lineup every week, which let a backup QB score whenever
+  his projection beat Goff's — hindsight no manager has. And "partner doesn't
+  lose" let through a deal nobody would accept. Three fixes: (1) lineups are
+  set once from rest-of-season averages and held; a starter on bye or hurt is
+  covered by the better of bench and waivers (`lineup._fixed_week`); `strength`
+  uses the same. (2) Fairness on value over waivers: received may exceed given
+  by at most 15% or 1 ppg. (3) A trade must vacate a hole starter (within 3.5
+  ppg of the best healthy FA at his slot; K/DEF excluded as waiver positions)
+  and the newcomer in that slot must out-project him by 1+ ppg — writing the
+  tests showed an equal-QB swap riding on a WR deal would otherwise count as
+  "fixing" the QB hole.

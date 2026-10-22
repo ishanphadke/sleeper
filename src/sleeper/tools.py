@@ -758,11 +758,13 @@ def strength(league_id: str | None = None) -> dict:
     pos_of = {pid: row["position"] for pid, row in table.items()}
     taken = {pid for r in ctx["rosters"] for pid in (r.get("players") or [])} | _hurt(table)
     fills = {w: LU.replacement(pts, taken, pos_of) for w, pts in weekly.items()}
+    avg = LU.ros_avg(weekly)
+    season_fill = LU.replacement(avg, taken, pos_of)
     uid = me()["user_id"]
     rows = []
     for r in ctx["rosters"]:
         pids = list(dict.fromkeys(pid for key in ("players", "reserve") for pid in (r.get(key) or [])))  # players already lists the IR slot
-        st = LU.strength(pids, pos_of, weekly, league.get("roster_positions") or [], playoff, fills)
+        st = LU.strength(pids, pos_of, weekly, league.get("roster_positions") or [], playoff, fills, avg, season_fill)
         unprojected = [table[pid]["name"] for pid in pids if pid in table and not any(pid in w for w in weekly.values())]
         team = ctx["teams"][r["roster_id"]]
         rows.append({
@@ -814,7 +816,7 @@ def trades(league_id: str | None = None, partner: str | None = None, limit: int 
         if not rivals:
             raise SleeperError(f"no team matches {partner!r}")
     me_side = side(mine)
-    avg = TR.ros_avg(weekly)
+    avg = LU.ros_avg(weekly)
     fill = LU.replacement(avg, taken, pos_of)
     rank = R.rank_of(R.load(league.get("season") or state()["season"], R.scoring_for(league)), table)
     suspect = {pid for pid in rostered_all if (k := rank(pid)).get("sl_ppg") is not None and k.get("espn_ppg") is not None
@@ -823,23 +825,19 @@ def trades(league_id: str | None = None, partner: str | None = None, limit: int 
     before = TR.my_slots(me_side["players"], pos_of, avg, slots, fill)
     found = TR.find(me_side, rivals, weekly, fills, fill, pos_of, slots, playoff, limit, tolerance)
 
-    def fixes(t):
-        new = [p for p in me_side["players"] if p not in t["give"] and p != t["i_cut"]] + list(t["get"])
-        after = TR.my_slots(new, pos_of, avg, slots, fill)
-        diffs = sorted(((a["ppg"] - b["ppg"], b, a) for b, a in zip(before, after) if a["slot"] == b["slot"]), key=lambda x: -x[0])
-        d, b, a = diffs[0]
-        return f"{b['slot']} {name(b['pid'])} {b['ppg']} -> {name(a['pid'])} {a['ppg']}"
-
     out = {
         "league": league.get("name", lid),
         "weeks": f"{weeks[0]}-{weeks[-1]}" + (f", playoffs {playoff[0]}-{playoff[-1]} x{LU.PLAYOFF_WEIGHT}" if playoff else ""),
-        "my_slots": [{"slot": r["slot"], "starter": name(r["pid"]), "ppg": r["ppg"], "best_waiver": r["waiver"], "margin": r["margin"]} for r in before],
+        "my_slots": [{"slot": r["slot"], "starter": name(r["pid"]), "ppg": r["ppg"], "best_waiver": r["waiver"], "margin": r["margin"],
+                      "hole": "yes" if r["margin"] < TR.HOLE_MARGIN and LU.SLOT_ELIGIBLE[r["slot"]] & TR.TRADE_POSITIONS
+                      else ("waivers" if not LU.SLOT_ELIGIBLE[r["slot"]] & TR.TRADE_POSITIONS else "-")} for r in before],
         "trades": [{
             "partner": t["partner"][:20],
             "give": ", ".join(name(p) for p in t["give"]),
             "get": ", ".join(name(p) for p in t["get"]),
             "my_gain": t["my_gain"], "their_gain": t["their_gain"],
-            "fixes": fixes(t),
+            "fixes": f"{name(t['hole']) if not t['hole'].startswith('FA:') else 'waiver ' + t['hole'][3:]} ({t['hole_margin']:+} over waivers) -> {name(t['filled_by'])}",
+            "value": f"{t['value_give']} for {t['value_get']}",
             "cuts": ", ".join(x for x in (f"me: {name(t['i_cut'])}" if t["i_cut"] else "", f"them: {name(t['they_cut'])}" if t["they_cut"] else "") if x) or "-",
         } for t in found] or "-",
     }
